@@ -16,6 +16,7 @@ const {
   tokenStatus,
 } = require('./muadi-client');
 const { handleLowestFareRequest } = require('./routes/lowest-fare');
+const { createScanner } = require('./scanner');
 const ocrClient = require('./ddddocr-client');
 const {
   buildAncillariesRequest,
@@ -85,6 +86,8 @@ const EXCHANGE_RATE_FALLBACK = Number.parseFloat(process.env.EXCHANGE_RATE_FALLB
 let exchangeRateCache = { value: null, fetchedAt: 0 };
 let exchangeRateInflight = null;
 const AIRPORTS_JSON_PATH = path.join(__dirname, '../data/airports.json');
+const PUBLIC_DIR = path.join(__dirname, '../public');
+const scanner = createScanner();
 
 function computePriceUSD(vnd) {
   const rate = (exchangeRateCache && exchangeRateCache.value) || EXCHANGE_RATE_FALLBACK;
@@ -290,7 +293,7 @@ function jsonHeaders(req, extra = {}) {
   const headers = {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, Idempotency-Key',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
     'Vary': 'Origin',
     ...extra,
   };
@@ -302,6 +305,40 @@ function jsonHeaders(req, extra = {}) {
 function sendJson(res, statusCode, payload, req = res.req, extraHeaders = {}) {
   res.writeHead(statusCode, jsonHeaders(req, extraHeaders));
   res.end(JSON.stringify(payload, null, 2));
+}
+
+function staticContentType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.html') return 'text/html; charset=utf-8';
+  if (ext === '.js') return 'application/javascript; charset=utf-8';
+  if (ext === '.css') return 'text/css; charset=utf-8';
+  if (ext === '.json') return 'application/json; charset=utf-8';
+  return 'application/octet-stream';
+}
+
+function staticFileForPath(pathname) {
+  const routes = {
+    '/': 'index.html',
+    '/app': 'index.html',
+    '/static/app.js': 'app.js',
+    '/static/styles.css': 'styles.css',
+  };
+  return routes[pathname] ? path.join(PUBLIC_DIR, routes[pathname]) : null;
+}
+
+function sendStatic(req, res, pathname) {
+  const filePath = staticFileForPath(pathname);
+  if (!filePath || !fs.existsSync(filePath)) return false;
+  const headers = {
+    'Content-Type': staticContentType(filePath),
+    'Cache-Control': 'no-cache',
+    'Vary': 'Origin',
+  };
+  const origin = resolveCorsOrigin(req);
+  if (origin) headers['Access-Control-Allow-Origin'] = origin;
+  res.writeHead(200, headers);
+  fs.createReadStream(filePath).pipe(res);
+  return true;
 }
 
 function readBody(req) {
@@ -339,6 +376,7 @@ function authTokenFromRequest(req) {
 
 function assertAuthorized(req, pathname) {
   if (pathname === '/health' || pathname === '/airports') return;
+  if (pathname === '/' || pathname === '/app' || pathname.startsWith('/static/')) return;
   if (!API_KEY) {
     if (ALLOW_NO_AUTH) return;
     throw new HttpError(503, 'Backend auth not configured. Set BACKEND_API_KEY or BACKEND_ALLOW_NO_AUTH=true.');
@@ -2226,6 +2264,7 @@ async function handleHealth(options = {}) {
     probe,
     ocr,
     exchangeRate: exchangeRateStatus,
+    scanner: scanner.settings(),
     cache: {
       searches: searchCache.size,
       searchResponses: searchResponseCache.size,
@@ -2247,6 +2286,15 @@ async function handleHealth(options = {}) {
       'POST /bookings/ancillaries',
       'POST /bookings/hold',
       'GET /bookings/:sessionID',
+      'GET /scan-settings',
+      'GET /scan-jobs',
+      'POST /scan-jobs',
+      'PATCH /scan-jobs/:id',
+      'DELETE /scan-jobs/:id',
+      'POST /scan-jobs/:id/run-now',
+      'GET /scan-jobs/:id/runs',
+      'GET /scan-notifications',
+      'POST /notifications/telegram/test',
     ],
   };
 }
@@ -2946,6 +2994,10 @@ async function dispatch(req, res) {
 
   assertAuthorized(req, pathname);
 
+  if (req.method === 'GET' && sendStatic(req, res, pathname)) {
+    return;
+  }
+
   if (req.method === 'GET' && pathname === '/health') {
     const probe = url.searchParams.get('probe') === 'true';
     sendJson(res, 200, await handleHealth({ probe }));
@@ -2979,6 +3031,48 @@ async function dispatch(req, res) {
 
   if (req.method === 'GET' && pathname === '/session/ensure') {
     sendJson(res, 200, await handleSessionEnsure());
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/scan-settings') {
+    sendJson(res, 200, { success: true, settings: scanner.settings() });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/scan-jobs') {
+    sendJson(res, 200, { success: true, jobs: scanner.listJobs() });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/scan-notifications') {
+    const limit = Number.parseInt(url.searchParams.get('limit') || '50', 10);
+    const status = url.searchParams.get('status') || undefined;
+    const jobId = url.searchParams.get('jobId') || undefined;
+    sendJson(res, 200, {
+      success: true,
+      notifications: scanner.listNotifications({ limit, status, jobId }),
+    });
+    return;
+  }
+
+  const scanRunsMatch = pathname.match(/^\/scan-runs\/([^/]+)$/);
+  if (req.method === 'GET' && scanRunsMatch) {
+    sendJson(res, 200, { success: true, run: scanner.getRun(decodeURIComponent(scanRunsMatch[1])) });
+    return;
+  }
+
+  const scanJobMatch = pathname.match(/^\/scan-jobs\/([^/]+)(?:\/(run-now|runs))?$/);
+  if (req.method === 'GET' && scanJobMatch && !scanJobMatch[2]) {
+    sendJson(res, 200, { success: true, job: scanner.getJob(decodeURIComponent(scanJobMatch[1])) });
+    return;
+  }
+
+  if (req.method === 'GET' && scanJobMatch && scanJobMatch[2] === 'runs') {
+    const limit = Number.parseInt(url.searchParams.get('limit') || '50', 10);
+    sendJson(res, 200, {
+      success: true,
+      runs: scanner.listRuns(decodeURIComponent(scanJobMatch[1]), { limit }),
+    });
     return;
   }
 
@@ -3016,6 +3110,31 @@ async function dispatch(req, res) {
 
   if (req.method === 'POST' && pathname === '/bookings/hold') {
     sendJson(res, 200, await handleHold(body, req));
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/scan-jobs') {
+    sendJson(res, 201, { success: true, job: scanner.createJob(body) });
+    return;
+  }
+
+  if (scanJobMatch && req.method === 'PATCH' && !scanJobMatch[2]) {
+    sendJson(res, 200, { success: true, job: scanner.updateJob(decodeURIComponent(scanJobMatch[1]), body) });
+    return;
+  }
+
+  if (scanJobMatch && req.method === 'DELETE' && !scanJobMatch[2]) {
+    sendJson(res, 200, scanner.deleteJob(decodeURIComponent(scanJobMatch[1])));
+    return;
+  }
+
+  if (scanJobMatch && req.method === 'POST' && scanJobMatch[2] === 'run-now') {
+    sendJson(res, 200, { success: true, run: await scanner.runJob(decodeURIComponent(scanJobMatch[1]), { manual: true }) });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/notifications/telegram/test') {
+    sendJson(res, 200, await scanner.sendTelegramTest(body.text));
     return;
   }
 
@@ -3081,6 +3200,7 @@ function errorPayload(error) {
 }
 
 function statusForError(error) {
+  if (error && Number.isInteger(error.statusCode)) return error.statusCode;
   if (error instanceof HttpError) return error.statusCode;
   if (error instanceof MuadiApiError) {
     if (error.status === 401) return 401;
@@ -3102,6 +3222,7 @@ function createServer() {
 async function shutdown(server, signal) {
   console.log(`[shutdown] ${signal} received — closing server...`);
   if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+  try { scanner.stop(); } catch (_) { /* ignore */ }
   try { await closeSingletonBrowser(); } catch (_) { /* ignore */ }
   server.close(() => {
     console.log('[shutdown] HTTP server closed');
@@ -3119,7 +3240,12 @@ if (require.main === module) {
   server.listen(DEFAULT_PORT, () => {
     console.log(`Nam Thanh backend API listening on http://localhost:${DEFAULT_PORT}`);
     console.log(`Auth: ${API_KEY ? 'API key required' : (ALLOW_NO_AUTH ? 'DISABLED (BACKEND_ALLOW_NO_AUTH=true, local dev only)' : 'misconfigured')}`);
-    console.log('Endpoints: /health, /airports, /config/exchange-rate, /auth/login, /flights/search, /flights/search/stream, /flights/lowest-fare, /flights/price, /bookings/ancillaries, /bookings/hold');
+    console.log('Endpoints: /, /health, /airports, /config/exchange-rate, /auth/login, /flights/search, /flights/search/stream, /flights/lowest-fare, /flights/price, /bookings/ancillaries, /bookings/hold, /scan-jobs');
+
+    if (String(process.env.SCANNER_AUTO_START || 'true').toLowerCase() !== 'false') {
+      scanner.start();
+      console.log('[scanner] Started local scan scheduler');
+    }
 
     // Kick off warm-up so the first real user request doesn't pay login cost.
     warmUpSession().catch((err) => console.error('[warmup] unexpected:', err && err.message));
