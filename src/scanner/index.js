@@ -6,6 +6,11 @@ const {
   sendScanReport,
   sendTelegramMessage,
 } = require('./telegram');
+const {
+  isZaloConfigured,
+  sendZaloMessage,
+  sendZaloReport,
+} = require('./zalo');
 const logger = require('../logger');
 
 const DEFAULT_RETENTION_DAYS = Number.parseFloat(process.env.SCAN_HISTORY_RETENTION_DAYS || '3');
@@ -130,6 +135,11 @@ function booleanValue(value, fallback = false) {
   return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
 }
 
+function normalizeNotifyChannel(value, fallback = 'telegram') {
+  const channel = String(value || fallback || 'telegram').trim().toLowerCase();
+  return channel === 'zalo' ? 'zalo' : 'telegram';
+}
+
 function mergeQueryInput(input = {}, existing = {}) {
   const prev = existing || {};
   const raw = { ...prev, ...(input.query || {}) };
@@ -197,6 +207,10 @@ function normalizeJobInput(input = {}, existing = null) {
   const notifyMode = ['every_run', 'on_change'].includes(String(notifyInput.mode || '').toLowerCase())
     ? String(notifyInput.mode).toLowerCase()
     : 'every_run';
+  const notifyChannel = normalizeNotifyChannel(
+    notifyInput.channel || notifyInput.platform,
+    existing && existing.notify ? existing.notify.channel : 'telegram'
+  );
 
   const job = {
     ...(existing || {}),
@@ -207,6 +221,7 @@ function normalizeJobInput(input = {}, existing = null) {
     schedule: normalizeSchedule(scheduleInput, existing && existing.schedule),
     notify: {
       telegramEnabled: booleanValue(notifyInput.telegramEnabled, true),
+      channel: notifyChannel,
       mode: notifyMode,
       notifyOnError: booleanValue(notifyInput.notifyOnError, true),
       muted: booleanValue(notifyInput.muted, existing && existing.notify ? !!existing.notify.muted : false),
@@ -328,7 +343,9 @@ function compareResults(previousRun, nextResults) {
 
 function shouldNotify(job, run) {
   const notify = job.notify || {};
-  if (!notify.telegramEnabled || !isTelegramConfigured()) return false;
+  const channel = normalizeNotifyChannel(notify.channel);
+  const configured = channel === 'zalo' ? isZaloConfigured() : isTelegramConfigured();
+  if (!notify.telegramEnabled || !configured) return false;
 
   // Circuit-breaker auto-disable alert always notifies (overrides mute).
   if (run.autoDisabledByCircuitBreaker) return true;
@@ -395,28 +412,38 @@ function createScanner(options = {}) {
 
   async function notifyIfNeeded(job, run) {
     if (!shouldNotify(job, run)) return { attempted: false, status: 'skipped' };
+    const channel = normalizeNotifyChannel(job.notify && job.notify.channel);
     try {
-      const sent = await sendScanReport(job, run);
+      const sent = channel === 'zalo'
+        ? await sendZaloReport(job, run)
+        : await sendScanReport(job, run);
       store.recordNotification({
         jobId: job.id,
         runId: run.id,
-        channel: 'telegram',
+        channel,
         status: 'sent',
         createdAt: nowIso(),
-        messageId: sent.messageId,
+        messageId: sent.messageId || (sent.messageIds || []).join(','),
+        messageCount: sent.messageCount || 1,
       });
-      return { attempted: true, status: 'sent', messageId: sent.messageId };
+      return {
+        attempted: true,
+        channel,
+        status: 'sent',
+        messageId: sent.messageId || (sent.messageIds || []).join(','),
+        messageCount: sent.messageCount || 1,
+      };
     } catch (error) {
       const message = redactError(error);
       store.recordNotification({
         jobId: job.id,
         runId: run.id,
-        channel: 'telegram',
+        channel,
         status: 'failed',
         createdAt: nowIso(),
         error: message,
       });
-      return { attempted: true, status: 'failed', error: message };
+      return { attempted: true, channel, status: 'failed', error: message };
     }
   }
 
@@ -566,6 +593,7 @@ function createScanner(options = {}) {
       emptyStreakThreshold: EMPTY_STREAK_ALERT_THRESHOLD,
       failureStreakThreshold: FAILURE_STREAK_THRESHOLD,
       telegramConfigured: isTelegramConfigured(),
+      zaloConfigured: isZaloConfigured(),
       started,
       runningJobIds: Array.from(running),
       storeFile: store.filePath,
@@ -601,7 +629,20 @@ function createScanner(options = {}) {
   async function sendTelegramTest(text) {
     const message = String(text || 'Price Scan Telegram test').slice(0, 1000);
     const result = await sendTelegramMessage(message);
-    return { success: true, ...result };
+    return { success: true, channel: 'telegram', ...result };
+  }
+
+  async function sendZaloTest(text) {
+    const message = String(text || 'Price Scan Zalo test').slice(0, 1000);
+    const result = await sendZaloMessage(message);
+    return { success: true, channel: 'zalo', ...result };
+  }
+
+  async function sendNotificationTest(channel, text) {
+    const normalized = normalizeNotifyChannel(channel);
+    return normalized === 'zalo'
+      ? sendZaloTest(text)
+      : sendTelegramTest(text);
   }
 
   return {
@@ -622,7 +663,9 @@ function createScanner(options = {}) {
     listRuns: (jobId, options) => store.listRuns(jobId, options),
     listNotifications,
     runJob,
+    sendNotificationTest,
     sendTelegramTest,
+    sendZaloTest,
     settings,
     start,
     stop,

@@ -19,7 +19,7 @@
             <button id="toggleApiKeyBtn" type="button" class="icon-btn" title="Show/hide API key">👁</button>
           </div>
           <button id="saveApiKeyBtn" type="button">Save key</button>
-          <button id="telegramTestBtn" type="button">Test Telegram</button>
+          <button id="notifyTestBtn" type="button">Test Notify</button>
         </div>
       </header>
 
@@ -104,9 +104,24 @@
                   <option value="on_change">On change</option>
                 </select>
               </label>
+              <div class="field">
+                Notify platform
+                <input id="notifyChannelInput" type="hidden" value="telegram">
+                <div class="channel-switch" role="group" aria-label="Notify platform">
+                  <button type="button" class="channel-option active" data-channel="telegram">Telegram</button>
+                  <button type="button" class="channel-option" data-channel="zalo">Zalo</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-2">
               <label>
                 Adults
                 <input id="adultInput" type="number" min="1" step="1" value="1" required>
+              </label>
+              <label>
+                Notify status
+                <input id="notifyStatusInput" type="text" value="Telegram" disabled>
               </label>
             </div>
 
@@ -117,7 +132,7 @@
               </label>
               <label class="inline-check">
                 <input id="telegramInput" type="checkbox" checked>
-                Telegram
+                Notifications
               </label>
               <label class="inline-check">
                 <input id="muteInput" type="checkbox">

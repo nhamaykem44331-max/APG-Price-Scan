@@ -2294,7 +2294,9 @@ async function handleHealth(options = {}) {
       'POST /scan-jobs/:id/run-now',
       'GET /scan-jobs/:id/runs',
       'GET /scan-notifications',
+      'POST /notifications/test',
       'POST /notifications/telegram/test',
+      'POST /notifications/zalo/test',
     ],
   };
 }
@@ -3135,6 +3137,16 @@ async function dispatch(req, res) {
 
   if (req.method === 'POST' && pathname === '/notifications/telegram/test') {
     sendJson(res, 200, await scanner.sendTelegramTest(body.text));
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/notifications/zalo/test') {
+    sendJson(res, 200, await scanner.sendZaloTest(body.text));
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/notifications/test') {
+    sendJson(res, 200, await scanner.sendNotificationTest(body.channel, body.text));
     return;
   }
 

@@ -119,6 +119,26 @@ function updateIntervalBounds() {
   }
 }
 
+function updateNotifyStatus() {
+  const channel = $('notifyChannelInput') ? $('notifyChannelInput').value : 'telegram';
+  const configured = channel === 'zalo'
+    ? !!state.settings?.zaloConfigured
+    : !!state.settings?.telegramConfigured;
+  const label = channel === 'zalo' ? 'Zalo' : 'Telegram';
+  if ($('notifyStatusInput')) {
+    $('notifyStatusInput').value = configured ? `${label} ready` : `${label} missing config`;
+  }
+}
+
+function setNotifyChannel(channel) {
+  const value = channel === 'zalo' ? 'zalo' : 'telegram';
+  if ($('notifyChannelInput')) $('notifyChannelInput').value = value;
+  document.querySelectorAll('.channel-option').forEach((button) => {
+    button.classList.toggle('active', button.dataset.channel === value);
+  });
+  updateNotifyStatus();
+}
+
 function jobPayloadFromForm() {
   const adults = Number($('adultInput').value || 1);
   return {
@@ -144,6 +164,7 @@ function jobPayloadFromForm() {
     },
     notify: {
       telegramEnabled: $('telegramInput').checked,
+      channel: $('notifyChannelInput') ? $('notifyChannelInput').value : 'telegram',
       mode: $('notifyModeInput').value,
       notifyOnError: true,
       muted: $('muteInput') ? $('muteInput').checked : false,
@@ -186,11 +207,13 @@ function clearForm() {
   $('intervalUnitInput').value = 'minutes';
   $('adultInput').value = '1';
   $('notifyModeInput').value = 'every_run';
+  setNotifyChannel('telegram');
   $('enabledInput').checked = true;
   $('telegramInput').checked = true;
   if ($('muteInput')) $('muteInput').checked = false;
   $('directInput').checked = true;
   updateIntervalBounds();
+  updateNotifyStatus();
   renderJobs();
   renderRuns([]);
 }
@@ -214,11 +237,13 @@ function fillForm(job) {
   $('intervalInput').value = schedule.intervalValue || (schedule.intervalUnit === 'seconds' ? schedule.intervalSeconds : schedule.intervalMinutes) || 60;
   $('adultInput').value = query.adt || 1;
   $('notifyModeInput').value = notify.mode || 'every_run';
+  setNotifyChannel(notify.channel || 'telegram');
   $('enabledInput').checked = !!job.enabled;
   $('telegramInput').checked = notify.telegramEnabled !== false;
   if ($('muteInput')) $('muteInput').checked = !!notify.muted;
   $('directInput').checked = !!query.directOnly;
   updateIntervalBounds();
+  updateNotifyStatus();
   renderJobs();
 }
 
@@ -233,7 +258,8 @@ function renderJobs() {
     const query = job.query || {};
     const notify = job.notify || {};
     const active = job.id === state.selectedJobId ? ' active' : '';
-    const meta = `${query.from || '-'}-${query.to || '-'} ${query.date || '-'} | ${query.flightNumber || query.airline || 'ALL'} | ${scheduleLabel(job.schedule || {})}`;
+    const channel = notify.channel === 'zalo' ? 'Zalo' : 'Telegram';
+    const meta = `${query.from || '-'}-${query.to || '-'} ${query.date || '-'} | ${query.flightNumber || query.airline || 'ALL'} | ${scheduleLabel(job.schedule || {})} | ${channel}`;
     const muteBadge = notify.muted ? '<span class="badge warn">muted</span>' : '';
     const toggleLabel = job.enabled ? 'On' : 'Off';
     const toggleClass = job.enabled ? 'toggle-on' : 'toggle-off';
@@ -414,6 +440,7 @@ async function loadSettings() {
   const data = await apiFetch('/scan-settings');
   state.settings = data.settings;
   $('retentionLabel').textContent = `Retention: ${data.settings.retentionDays} days`;
+  updateNotifyStatus();
   return data.settings;
 }
 
@@ -422,7 +449,8 @@ async function loadHealth() {
     const health = await apiFetch('/health');
     const scanner = health.scanner || {};
     const telegram = scanner.telegramConfigured ? 'Telegram ready' : 'Telegram missing';
-    $('systemStatus').textContent = `Backend: ${health.ok ? 'ok' : 'needs attention'} | ${telegram}`;
+    const zalo = scanner.zaloConfigured ? 'Zalo ready' : 'Zalo missing';
+    $('systemStatus').textContent = `Backend: ${health.ok ? 'ok' : 'needs attention'} | ${telegram} | ${zalo}`;
   } catch (error) {
     $('systemStatus').textContent = `Backend status: ${error.message}`;
   }
@@ -519,16 +547,17 @@ async function deleteJob() {
   });
 }
 
-async function testTelegram() {
-  const text = `Price Scan test ${new Date().toISOString()}`;
-  const button = $('telegramTestBtn');
+async function testNotify() {
+  const channel = $('notifyChannelInput') ? $('notifyChannelInput').value : 'telegram';
+  const text = `Price Scan ${channel} test ${new Date().toISOString()}`;
+  const button = $('notifyTestBtn');
   await withBusyButton(button, async () => {
     try {
-      await apiFetch('/notifications/telegram/test', {
+      await apiFetch('/notifications/test', {
         method: 'POST',
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ channel, text }),
       });
-      toast('Telegram sent', 'success');
+      toast(`${channel === 'zalo' ? 'Zalo' : 'Telegram'} sent`, 'success');
     } catch (error) {
       toast(error.message, 'error');
     }
@@ -550,10 +579,13 @@ function bindEvents() {
       toggleKeyBtn.textContent = input.type === 'password' ? '👁' : '🙈';
     });
   }
-  $('telegramTestBtn').addEventListener('click', () => testTelegram());
+  $('notifyTestBtn').addEventListener('click', () => testNotify());
   $('refreshBtn').addEventListener('click', () => init().catch((error) => toast(error.message, 'error')));
   $('newJobBtn').addEventListener('click', clearForm);
   $('intervalUnitInput').addEventListener('change', updateIntervalBounds);
+  document.querySelectorAll('.channel-option').forEach((button) => {
+    button.addEventListener('click', () => setNotifyChannel(button.dataset.channel));
+  });
   $('jobForm').addEventListener('submit', (event) => saveJob(event));
   $('runNowBtn').addEventListener('click', () => runJob());
   $('deleteJobBtn').addEventListener('click', () => deleteJob());

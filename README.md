@@ -1,6 +1,6 @@
 # Price Scan - Nam Thanh Flight Fare Scanner
 
-Ứng dụng local để tự động quét giá vé máy bay thật từ hệ thống Nam Thanh/booking.namthanh.vn, lưu lịch sử giá và gửi báo cáo qua Telegram Bot.
+Ứng dụng local để tự động quét giá vé máy bay thật từ hệ thống Nam Thanh/booking.namthanh.vn, lưu lịch sử giá và gửi báo cáo qua Telegram Bot hoặc Zalo qua n8n webhook.
 
 ## Tính Năng Chính
 
@@ -9,7 +9,7 @@
 - Frontend local tại `http://localhost:3100/` để tạo và quản lý job quét giá.
 - Cấu hình job theo ngày bay, chặng bay, hãng bay, số hiệu chuyến bay, giờ bay hoặc khung giờ.
 - Quét định kỳ theo phút hoặc theo giây để test nhanh.
-- Gửi báo cáo qua Telegram Bot sau mỗi lần quét hoặc chỉ khi giá thay đổi.
+- Gửi báo cáo qua Telegram Bot hoặc Zalo sau mỗi lần quét hoặc chỉ khi giá thay đổi.
 - Lưu lịch sử quét local trong `data/scan-store.json`.
 - Tự xóa lịch sử cũ theo `SCAN_HISTORY_RETENTION_DAYS`, mặc định 3 ngày.
 
@@ -28,6 +28,7 @@ Node backend
         +-- Scanner/scheduler: src/scanner/index.js
         +-- Search service:     src/scanner/scan-service.js
         +-- Telegram notifier:  src/scanner/telegram.js
+        +-- Zalo/n8n notifier:  src/scanner/zalo.js
         +-- Local store:        src/scanner/store.js
         |
         v
@@ -37,7 +38,7 @@ Nam Thanh session + Muadi API
   src/booking-workflow.js
 ```
 
-Scheduler hiện dùng `setTimeout` trong chính process Node.js. Mỗi job có `nextRunAt`; khi đến giờ, backend chạy quét, lưu kết quả, gửi Telegram nếu bật, rồi cập nhật `nextRunAt = thời điểm kết thúc + interval`.
+Scheduler hiện dùng `setTimeout` trong chính process Node.js. Mỗi job có `nextRunAt`; khi đến giờ, backend chạy quét, lưu kết quả, gửi thông báo qua nền tảng đã chọn nếu bật, rồi cập nhật `nextRunAt = thời điểm kết thúc + interval`.
 
 ## Yêu Cầu
 
@@ -46,7 +47,7 @@ Scheduler hiện dùng `setTimeout` trong chính process Node.js. Mỗi job có 
 - Python 3.8+ để chạy OCR server.
 - Chromium cho Playwright.
 - Tài khoản Nam Thanh hợp lệ.
-- Telegram Bot token và Chat ID nếu muốn nhận thông báo.
+- Telegram Bot token/Chat ID hoặc n8n Zalo webhook nếu muốn nhận thông báo.
 
 ## Cài Đặt Lần Đầu
 
@@ -102,6 +103,12 @@ TELEGRAM_CHAT_ID=
 TELEGRAM_API_BASE=https://api.telegram.org
 TELEGRAM_TIMEOUT_MS=10000
 TELEGRAM_DISABLE_NOTIFICATION=false
+
+N8N_ZALO_WEBHOOK_URL=
+N8N_ZALO_TARGET_ID=
+N8N_ZALO_THREAD_TYPE=1
+N8N_WEBHOOK_TIMEOUT_MS=10000
+N8N_WEBHOOK_MAX_RETRY=3
 ```
 
 Ghi chú:
@@ -160,9 +167,11 @@ Các trường chính:
 - `Time from` / `Time to`: khung giờ bay, ví dụ `06:00` đến `12:00`.
 - `Interval`: số chu kỳ quét.
 - `Interval unit`: chọn `Minutes` hoặc `Seconds`.
-- `Notify mode`: chọn cách gửi Telegram.
+- `Notify mode`: chọn cách gửi thông báo (`Every run` hoặc `On change`).
+- `Notify platform`: switch chọn kênh nhận thông báo `Telegram` hoặc `Zalo`.
 - `Enabled`: bật/tắt lịch quét tự động.
-- `Telegram`: bật/tắt gửi Telegram cho job này.
+- `Notifications`: bật/tắt gửi thông báo cho job này.
+- `Mute`: vẫn quét và lưu lịch sử nhưng không gửi thông báo.
 - `Direct only`: chỉ lấy chuyến bay thẳng.
 
 Các nút:
@@ -170,7 +179,7 @@ Các nút:
 - `Save job`: lưu job và lập lịch tự động.
 - `Run now`: quét ngay một lần.
 - `Delete`: xóa job và lịch sử của job đó.
-- `Test Telegram`: gửi tin nhắn test đến Telegram.
+- `Test Notify`: gửi tin nhắn test đến nền tảng đang chọn trong switch Telegram/Zalo.
 
 ## Quét Theo Giây Để Test
 
@@ -234,12 +243,12 @@ Luồng chạy:
 3. Với mỗi job `enabled=true`, scanner tạo `setTimeout` đến `nextRunAt`.
 4. Đến giờ, scanner gọi Nam Thanh/Muadi để lấy giá.
 5. Kết quả được lưu vào `runs`.
-6. Nếu bật Telegram, backend gửi báo cáo.
+6. Nếu bật thông báo, backend gửi báo cáo qua Telegram hoặc Zalo theo `Notify platform`.
 7. Scanner cập nhật `nextRunAt` và lập timer mới.
 
 Nếu backend bị tắt, timer trong RAM mất. Khi bật lại backend, scanner đọc lại job từ store và lập lịch lại.
 
-## Telegram
+## Thông Báo: Telegram Và Zalo
 
 Ứng dụng dùng Telegram Bot API `sendMessage`.
 
@@ -274,7 +283,51 @@ Nội dung Telegram đã được polish:
 Cảnh báo tự động:
 
 - **Empty streak**: nếu mode `On change` và scan trả về rỗng `SCAN_EMPTY_STREAK_THRESHOLD` lần liên tiếp (mặc định 3), bắn 1 alert để khỏi bị silent fail.
-- **Circuit breaker**: nếu scan lỗi `SCAN_FAILURE_THRESHOLD` lần liên tiếp (mặc định 5), job tự `enabled=false` + bắn alert Telegram (luôn gửi, kể cả khi mute).
+- **Circuit breaker**: nếu scan lỗi `SCAN_FAILURE_THRESHOLD` lần liên tiếp (mặc định 5), job tự `enabled=false` + bắn alert qua nền tảng đã chọn (luôn gửi, kể cả khi mute).
+
+### Zalo Qua n8n
+
+Khi chọn `Notify platform = Zalo`, backend không gọi Zalo trực tiếp. Backend POST payload vào webhook n8n, workflow n8n dùng node Zalo đã đăng nhập để gửi nội dung sang user hoặc group Zalo.
+
+Cấu hình `.env`:
+
+```env
+N8N_ZALO_WEBHOOK_URL=https://n8nhosting-72225366.phoai.vn/webhook/price-scan-zalo
+N8N_ZALO_TARGET_ID=
+N8N_ZALO_THREAD_TYPE=1
+N8N_WEBHOOK_TIMEOUT_MS=10000
+N8N_WEBHOOK_MAX_RETRY=3
+```
+
+Ý nghĩa:
+
+- `N8N_ZALO_WEBHOOK_URL`: production webhook URL của workflow `Price Scan`.
+- `N8N_ZALO_TARGET_ID`: Zalo user ID hoặc group ID nhận thông báo.
+- `N8N_ZALO_THREAD_TYPE`: `0` nếu gửi cá nhân, `1` nếu gửi group.
+- `N8N_WEBHOOK_MAX_RETRY`: retry khi webhook n8n trả 429/5xx hoặc lỗi mạng.
+
+Workflow n8n `Price Scan` cần có luồng:
+
+```text
+Webhook POST /webhook/price-scan-zalo
+  -> ZaloUser send message
+```
+
+Webhook nhận các field chính từ backend:
+
+```json
+{
+  "summaryText": "noi dung bao cao",
+  "zaloTargetId": "user_or_group_id",
+  "zaloThreadType": 1,
+  "job": { "id": "job_xxx", "name": "VJ125 HAN-SGN" },
+  "query": { "from": "HAN", "to": "SGN", "date": "2026-05-14" },
+  "run": { "status": "success", "matchCount": 1 },
+  "results": []
+}
+```
+
+Trên UI, dùng switch `Notify platform` để chọn `Telegram` hoặc `Zalo` cho từng job. Nút `Test Notify` sẽ gửi test theo nền tảng đang chọn.
 
 ## Lưu Lịch Sử
 
@@ -289,7 +342,7 @@ File này chứa:
 - Danh sách job.
 - Lịch sử các lần quét.
 - Kết quả từng lần quét.
-- Trạng thái gửi Telegram.
+- Trạng thái gửi thông báo.
 
 Retention mặc định:
 
@@ -303,7 +356,7 @@ Scanner tự prune lịch sử cũ khi start và định kỳ trong lúc chạy.
 
 ```text
 GET    /health                          # Full health + scanner stats
-GET    /scan-settings                   # Min interval, thresholds, telegram status
+GET    /scan-settings                   # Min interval, thresholds, Telegram/Zalo status
 GET    /scan-jobs                       # List all jobs
 GET    /scan-jobs/:id                   # Get job detail
 POST   /scan-jobs                       # Create job
@@ -312,8 +365,10 @@ DELETE /scan-jobs/:id                   # Delete job + runs + notifications
 POST   /scan-jobs/:id/run-now           # Manual trigger
 GET    /scan-jobs/:id/runs?limit=50     # History runs of one job
 GET    /scan-runs/:id                   # Get one run detail
-GET    /scan-notifications?limit=50&status=sent|failed&jobId=...  # Audit Telegram delivery
+GET    /scan-notifications?limit=50&status=sent|failed&jobId=...  # Audit notification delivery
+POST   /notifications/test              # Send test message by channel: telegram|zalo
 POST   /notifications/telegram/test     # Send test Telegram message
+POST   /notifications/zalo/test         # Send test Zalo message through n8n webhook
 ```
 
 `/health.scanner` trả về thêm `jobCount`, `enabledJobCount`, `nextScheduledRun`, `recentFailures`, `notificationFailures24h`, `lastRun` để monitor không cần gọi thêm endpoint.
@@ -343,6 +398,7 @@ Ví dụ tạo job quét mỗi 60 phút:
   },
   "notify": {
     "telegramEnabled": true,
+    "channel": "telegram",
     "mode": "every_run",
     "notifyOnError": true,
     "muted": false
@@ -461,8 +517,16 @@ Nếu Telegram không gửi:
 
 - Kiểm tra `TELEGRAM_BOT_TOKEN`.
 - Kiểm tra `TELEGRAM_CHAT_ID`.
-- Bấm `Test Telegram` trên UI.
+- Chọn `Notify platform = Telegram`, rồi bấm `Test Notify` trên UI.
 - Xem response của `POST /notifications/telegram/test`.
+
+Nếu Zalo không gửi:
+
+- Kiểm tra workflow n8n `Price Scan` đang active.
+- Kiểm tra `N8N_ZALO_WEBHOOK_URL` trỏ tới production webhook `/webhook/price-scan-zalo`.
+- Kiểm tra `N8N_ZALO_TARGET_ID` và `N8N_ZALO_THREAD_TYPE`.
+- Chọn `Notify platform = Zalo`, rồi bấm `Test Notify` trên UI.
+- Xem response của `POST /notifications/zalo/test`.
 
 Nếu không quét được giá:
 
@@ -494,5 +558,5 @@ Khi chuyển từ local sang server:
 - Không commit `.env`.
 - Không commit `session/storage-state.json`.
 - Không commit `data/scan-store.json` nếu có dữ liệu thật.
-- Không gửi token Telegram, mật khẩu Nam Thanh hoặc access token qua log/chat.
+- Không gửi token Telegram, token n8n, mật khẩu Nam Thanh hoặc access token qua log/chat.
 - Khi deploy public, bắt buộc bật API key và giới hạn CORS.
