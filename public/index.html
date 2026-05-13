@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Price Scan</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>Price Scan</h1>
+          <p id="systemStatus">Backend status: checking</p>
+        </div>
+        <div class="topbar-actions">
+          <div class="api-key-wrap">
+            <input id="apiKeyInput" class="api-key-input" type="password" placeholder="API key">
+            <button id="toggleApiKeyBtn" type="button" class="icon-btn" title="Show/hide API key">👁</button>
+          </div>
+          <button id="saveApiKeyBtn" type="button">Save key</button>
+          <button id="telegramTestBtn" type="button">Test Telegram</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel form-panel">
+          <div class="panel-title">
+            <h2>Scan job</h2>
+            <button id="newJobBtn" type="button">New</button>
+          </div>
+
+          <form id="jobForm" class="job-form">
+            <input id="jobId" type="hidden">
+
+            <label>
+              Name
+              <input id="jobName" type="text" placeholder="VJ125 HAN-SGN">
+            </label>
+
+            <div class="grid-2">
+              <label>
+                From
+                <input id="fromInput" type="text" maxlength="3" value="HAN" required>
+              </label>
+              <label>
+                To
+                <input id="toInput" type="text" maxlength="3" value="SGN" required>
+              </label>
+            </div>
+
+            <div class="grid-2">
+              <label>
+                Flight date
+                <input id="dateInput" type="date" required>
+              </label>
+              <label>
+                Airline
+                <input id="airlineInput" type="text" maxlength="3" value="VJ">
+              </label>
+            </div>
+
+            <div class="grid-2">
+              <label>
+                Flight number
+                <input id="flightInput" type="text" value="VJ125">
+              </label>
+              <label>
+                Exact time
+                <input id="timeInput" type="time">
+              </label>
+            </div>
+
+            <div class="grid-2">
+              <label>
+                Time from
+                <input id="timeStartInput" type="time" value="06:00">
+              </label>
+              <label>
+                Time to
+                <input id="timeEndInput" type="time" value="12:00">
+              </label>
+            </div>
+
+            <div class="grid-2">
+              <label>
+                Interval
+                <input id="intervalInput" type="number" min="5" step="1" value="60" required>
+              </label>
+              <label>
+                Interval unit
+                <select id="intervalUnitInput">
+                  <option value="minutes">Minutes</option>
+                  <option value="seconds">Seconds</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="grid-2">
+              <label>
+                Notify mode
+                <select id="notifyModeInput">
+                  <option value="every_run">Every run</option>
+                  <option value="on_change">On change</option>
+                </select>
+              </label>
+              <label>
+                Adults
+                <input id="adultInput" type="number" min="1" step="1" value="1" required>
+              </label>
+            </div>
+
+            <div class="toggles">
+              <label class="inline-check">
+                <input id="enabledInput" type="checkbox" checked>
+                Enabled
+              </label>
+              <label class="inline-check">
+                <input id="telegramInput" type="checkbox" checked>
+                Telegram
+              </label>
+              <label class="inline-check">
+                <input id="muteInput" type="checkbox">
+                Mute (vẫn quét, không báo)
+              </label>
+              <label class="inline-check">
+                <input id="directInput" type="checkbox" checked>
+                Direct only
+              </label>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit">Save job</button>
+              <button id="runNowBtn" type="button">Run now</button>
+              <button id="deleteJobBtn" class="danger" type="button">Delete</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel jobs-panel">
+          <div class="panel-title">
+            <h2>Jobs</h2>
+            <button id="refreshBtn" type="button">Refresh</button>
+          </div>
+          <div id="jobsList" class="jobs-list"></div>
+        </section>
+
+        <section class="panel runs-panel">
+          <div class="panel-title">
+            <h2>History</h2>
+            <span id="retentionLabel" class="muted"></span>
+          </div>
+          <div id="runsList" class="runs-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
