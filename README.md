@@ -1,230 +1,498 @@
-# Nam Thanh Auto-Login Script
+# Price Scan - Nam Thanh Flight Fare Scanner
 
-## Direct Muadi API workflow
+Ứng dụng local để tự động quét giá vé máy bay thật từ hệ thống Nam Thanh/booking.namthanh.vn, lưu lịch sử giá và gửi báo cáo qua Telegram Bot.
 
-The current production workflow avoids UI scraping for fare and booking steps:
+## Tính Năng Chính
 
-1. Login with Playwright/OCR and save `session/storage-state.json`.
-2. Read `accessToken` from localStorage in the saved session.
-3. Call Muadi API directly with encrypted body and encrypted `tsp` header.
-4. Create a search session.
-5. Search flights by airline.
-6. Pick the target flight and the cheapest fare.
-7. Create booking/hold PNR.
-8. Poll ticket info by session ID and print the PNR result.
+- Đăng nhập Nam Thanh tự động bằng Playwright và OCR captcha.
+- Gọi API Muadi/Nam Thanh trực tiếp để lấy giá thật, không scrape UI kết quả.
+- Frontend local tại `http://localhost:3100/` để tạo và quản lý job quét giá.
+- Cấu hình job theo ngày bay, chặng bay, hãng bay, số hiệu chuyến bay, giờ bay hoặc khung giờ.
+- Quét định kỳ theo phút hoặc theo giây để test nhanh.
+- Gửi báo cáo qua Telegram Bot sau mỗi lần quét hoặc chỉ khi giá thay đổi.
+- Lưu lịch sử quét local trong `data/scan-store.json`.
+- Tự xóa lịch sử cũ theo `SCAN_HISTORY_RETENTION_DAYS`, mặc định 3 ngày.
 
-Start the OCR server before login:
+## Kiến Trúc
 
-```bash
-npm run ocr
+```text
+Frontend static
+  public/index.html
+  public/app.js
+  public/styles.css
+        |
+        v
+Node backend
+  src/server.js
+        |
+        +-- Scanner/scheduler: src/scanner/index.js
+        +-- Search service:     src/scanner/scan-service.js
+        +-- Telegram notifier:  src/scanner/telegram.js
+        +-- Local store:        src/scanner/store.js
+        |
+        v
+Nam Thanh session + Muadi API
+  session/storage-state.json
+  src/muadi-client.js
+  src/booking-workflow.js
 ```
 
-Login or refresh the session:
+Scheduler hiện dùng `setTimeout` trong chính process Node.js. Mỗi job có `nextRunAt`; khi đến giờ, backend chạy quét, lưu kết quả, gửi Telegram nếu bật, rồi cập nhật `nextRunAt = thời điểm kết thúc + interval`.
 
-```bash
-npm run login
-```
+## Yêu Cầu
 
-Check route availability:
+- Node.js 18+.
+- npm.
+- Python 3.8+ để chạy OCR server.
+- Chromium cho Playwright.
+- Tài khoản Nam Thanh hợp lệ.
+- Telegram Bot token và Chat ID nếu muốn nhận thông báo.
 
-```bash
-npm run journey -- --from HAN --to SGN --date 21-04-2026 --airline VN
-```
+## Cài Đặt Lần Đầu
 
-Check full fare with tax and fees:
-
-```bash
-npm run price -- --from HAN --to SGN --date 21-04-2026 --airline VN --time 05:00
-```
-
-Dry-run a hold booking without creating a real PNR:
-
-```bash
-npm run hold -- --from HAN --to SGN --date 21-04-2026 --airline VN --time 05:00 --passenger "MR Vu Duc Anh" --dry-run
-```
-
-Create a real hold booking:
-
-```bash
-npm run hold -- --from HAN --to SGN --date 21-04-2026 --airline VN --time 05:00 --passenger "MR Vu Duc Anh"
-```
-
-If the API returns an expired token before booking, the CLI will login again once and retry. After `create-booking` starts, the CLI does not auto-retry because that could create duplicate PNRs.
-
-Script local Node.js tự động đăng nhập vào `booking.namthanh.vn` bằng Playwright + ddddocr để đọc captcha.
-
-## Yêu cầu
-
-- Node.js 18+
-- Python 3.8+ (để chạy ddddocr) HOẶC Docker
-- Kết nối internet
-
-## Cài đặt
-
-### Bước 1: Cài dependencies
-
-```bash
-cd namthanh-auto-login
+```powershell
+cd 'C:\Cá nhân\Dự Án\Price Scan'
 npm install
 npx playwright install chromium
 ```
 
-### Bước 2: Cài và chạy ddddocr API
+Nếu dùng Python venv local:
 
-**Cách A — Dùng Docker (khuyến nghị):**
-
-```bash
-git clone https://github.com/sml2h3/ddddocr.git /tmp/ddddocr
-cd /tmp/ddddocr
-docker build -t ddddocr-api .
-docker run -d --name ddddocr-api -p 8000:8000 \
-  -e DDDDOCR_SHOW_AD=false \
-  -e DDDDOCR_BETA=true \
-  ddddocr-api
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python -m pip install flask ddddocr
 ```
 
-**Cách B — Chạy Python trực tiếp:**
+Tạo `.env` từ mẫu:
 
-```bash
-pip install "ddddocr[api]"
-python -m ddddocr api --port 8000 --beta true --show-ad false
+```powershell
+Copy-Item .env.example .env
 ```
 
-Kiểm tra ddddocr chạy OK:
+Sau đó điền các thông tin thật vào `.env`.
 
-```bash
-curl http://localhost:8000/health
-# Output mong đợi: {"status":"ok","timestamp":...}
+## Cấu Hình `.env`
+
+Các biến quan trọng:
+
+```env
+NAMTHANH_USERNAME=
+NAMTHANH_PASSWORD=
+NAMTHANH_AGENCY_CODE=
+
+DDDDOCR_API_URL=http://localhost:8001
+HEADLESS=true
+SESSION_FILE=./session/storage-state.json
+
+MUADI_AES_KEY=
+MUADI_AES_IV=
+
+BACKEND_PORT=3100
+BACKEND_ALLOW_NO_AUTH=true
+BACKEND_WARMUP=false
+
+SCAN_STORE_FILE=./data/scan-store.json
+SCAN_HISTORY_RETENTION_DAYS=3
+SCAN_MIN_INTERVAL_MINUTES=5
+SCAN_MIN_INTERVAL_SECONDS=5
+SCANNER_AUTO_START=true
+
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+TELEGRAM_API_BASE=https://api.telegram.org
+TELEGRAM_TIMEOUT_MS=10000
+TELEGRAM_DISABLE_NOTIFICATION=false
 ```
 
-### Bước 3: Cấu hình credentials
+Ghi chú:
 
-```bash
-cp .env.example .env
-# Mở .env, điền NAMTHANH_PASSWORD
+- `BACKEND_ALLOW_NO_AUTH=true` chỉ nên dùng khi chạy local.
+- Khi deploy server, đặt `BACKEND_API_KEY` và tắt `BACKEND_ALLOW_NO_AUTH`.
+- Không commit `.env`, `session/`, `screenshots/`, `data/scan-store.json`.
+
+## Chạy Local
+
+Terminal 1: chạy OCR server.
+
+```powershell
+npm run ocr
 ```
 
-**⚠️ QUAN TRỌNG: Không commit file `.env` lên GitHub!**
+Hoặc nếu dùng venv:
 
-## Sử dụng
-
-### Lần đầu: Inspect trang login
-
-```bash
-npm run inspect
+```powershell
+.\.venv\Scripts\python ocr_server.py 8001
 ```
 
-Script này sẽ:
-- Mở trình duyệt Chromium
-- Lưu HTML, screenshots, danh sách form elements vào `./debug/`
-- Giữ browser mở để Andy inspect thủ công với DevTools
-- Note lại các selector chính xác
+Kiểm tra OCR:
 
-Sau khi inspect, nếu cần, **cập nhật selectors trong `src/config.js`** cho chính xác hơn.
-
-### Chạy auto-login
-
-```bash
-npm start
+```powershell
+Invoke-RestMethod http://127.0.0.1:8001/health
 ```
 
-Output mẫu:
+Terminal 2: chạy backend và frontend.
 
-```
-╔════════════════════════════════════════════════╗
-║  Nam Thanh Auto-Login Script                   ║
-║  Sử dụng: Playwright + ddddocr                 ║
-╚════════════════════════════════════════════════╝
-
-🏥 Kiểm tra ddddocr API...
-  ✓ ddddocr API đang hoạt động
-
-📍 Mở https://booking.namthanh.vn/login
-
-🔄 Lần thử 1:
-  ✓ Tìm thấy username input với selector: input[name="username"]
-  ✓ Đã điền username: HTXTP01
-  ✓ Đã điền password: ************
-  ✓ Đã điền mã đại lý: AML
-  📸 Chụp ảnh captcha...
-  💾 Lưu captcha: ./screenshots/captcha-attempt-1.png
-  🤖 Gọi ddddocr để đọc captcha...
-  🔤 Kết quả OCR: "AB3X7Q"
-  ✓ Đã điền captcha: AB3X7Q
-  🚀 Đã click submit, chờ kết quả...
-  ✅ Đăng nhập thành công!
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎉 ĐĂNG NHẬP THÀNH CÔNG!
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```powershell
+npm run backend
 ```
 
-## Cấu trúc project
+Mở trình duyệt:
 
+```text
+http://localhost:3100/
 ```
-namthanh-auto-login/
-├── .env.example           # Template credentials
-├── .env                   # Credentials thật (KHÔNG commit)
-├── .gitignore
-├── package.json
-├── README.md
+
+Nếu frontend chưa hiện giao diện mới, bấm `Ctrl + F5` để tải lại cache.
+
+## Hướng Dẫn Sử Dụng Frontend
+
+Mở `http://localhost:3100/`, tạo job quét giá bằng form bên trái.
+
+Các trường chính:
+
+- `Name`: tên job để dễ nhận diện.
+- `From`: sân bay đi, ví dụ `HAN`.
+- `To`: sân bay đến, ví dụ `SGN`.
+- `Flight date`: ngày bay.
+- `Airline`: mã hãng, ví dụ `VJ`.
+- `Flight number`: số hiệu chuyến bay, ví dụ `VJ125`.
+- `Exact time`: nếu chỉ muốn đúng một giờ bay cụ thể.
+- `Time from` / `Time to`: khung giờ bay, ví dụ `06:00` đến `12:00`.
+- `Interval`: số chu kỳ quét.
+- `Interval unit`: chọn `Minutes` hoặc `Seconds`.
+- `Notify mode`: chọn cách gửi Telegram.
+- `Enabled`: bật/tắt lịch quét tự động.
+- `Telegram`: bật/tắt gửi Telegram cho job này.
+- `Direct only`: chỉ lấy chuyến bay thẳng.
+
+Các nút:
+
+- `Save job`: lưu job và lập lịch tự động.
+- `Run now`: quét ngay một lần.
+- `Delete`: xóa job và lịch sử của job đó.
+- `Test Telegram`: gửi tin nhắn test đến Telegram.
+
+## Quét Theo Giây Để Test
+
+Để test thực tế nhanh:
+
+1. Nhập thông tin chuyến bay.
+2. Đặt `Interval = 5`.
+3. Chọn `Interval unit = Seconds`.
+4. Bật `Enabled`.
+5. Bấm `Save job`.
+
+Backend sẽ quét lại sau mỗi 5 giây, tính từ lúc lần quét trước kết thúc.
+
+Ngưỡng tối thiểu được điều khiển bằng:
+
+```env
+SCAN_MIN_INTERVAL_SECONDS=5
+SCAN_MIN_INTERVAL_MINUTES=5
+```
+
+Khuyến nghị:
+
+- Dùng giây chỉ để test local trong thời gian ngắn.
+- Khi theo dõi thật, dùng phút, ví dụ 30 hoặc 60 phút.
+- Không đặt chu kỳ quá dày khi deploy server để tránh tạo tải không cần thiết lên hệ thống Nam Thanh.
+
+## Cơ Chế Scheduler
+
+Mỗi job được lưu vào `data/scan-store.json` với cấu trúc chính:
+
+```json
+{
+  "id": "job_xxx",
+  "enabled": true,
+  "query": {
+    "from": "HAN",
+    "to": "SGN",
+    "date": "14-05-2026",
+    "airline": "VJ",
+    "flightNumber": "VJ125",
+    "departureTimeStart": "06:00",
+    "departureTimeEnd": "12:00"
+  },
+  "schedule": {
+    "intervalValue": 60,
+    "intervalUnit": "minutes",
+    "intervalSeconds": 3600
+  },
+  "notify": {
+    "telegramEnabled": true,
+    "mode": "every_run"
+  },
+  "nextRunAt": "2026-05-13T12:20:23.000Z"
+}
+```
+
+Luồng chạy:
+
+1. Backend start và gọi `scanner.start()`.
+2. Scanner đọc job từ `data/scan-store.json`.
+3. Với mỗi job `enabled=true`, scanner tạo `setTimeout` đến `nextRunAt`.
+4. Đến giờ, scanner gọi Nam Thanh/Muadi để lấy giá.
+5. Kết quả được lưu vào `runs`.
+6. Nếu bật Telegram, backend gửi báo cáo.
+7. Scanner cập nhật `nextRunAt` và lập timer mới.
+
+Nếu backend bị tắt, timer trong RAM mất. Khi bật lại backend, scanner đọc lại job từ store và lập lịch lại.
+
+## Telegram
+
+Ứng dụng dùng Telegram Bot API `sendMessage`.
+
+Cấu hình:
+
+```env
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+```
+
+Cách lấy thông tin:
+
+- Tạo bot bằng BotFather để lấy `TELEGRAM_BOT_TOKEN`.
+- Nhắn tin cho bot hoặc thêm bot vào group.
+- Lấy `TELEGRAM_CHAT_ID` bằng công cụ/API Telegram phù hợp với bot của bạn.
+
+Chế độ thông báo:
+
+- `Every run`: gửi báo cáo sau mỗi lần quét.
+- `On change`: chỉ gửi khi có chuyến mới, hết chuyến, **giá thay đổi**, hoặc **số chỗ thay đổi** (cả tăng lẫn giảm, kể cả sold-out 5 → 0).
+- Per-job toggle `Mute`: tạm tắt thông báo mà vẫn tiếp tục quét và lưu lịch sử (error/auto-disable alert vẫn được gửi).
+
+Nội dung Telegram đã được polish:
+
+- Emoji trạng thái: ✅ run thành công, ⚠️ run lỗi, 🆕 lần quét đầu tiên, 🛑 job vừa bị auto-disable, 🔇 cảnh báo empty streak.
+- Marker per-flight: 🔴 `SOLD` khi `seatAvailable === 0`, 🟡 khi `seatAvailable < 5`.
+- Header `📊 Change:` tóm tắt: số chuyến giá lên/xuống kèm `avg %`, số chỗ đổi (kèm số SOLD), số chuyến mới/mất.
+- Group theo airline (`── VJ ──`, `── VN ──`...) để dễ đọc khi quét nhiều hãng cùng route.
+- Tự động split thành nhiều message Telegram nếu vượt 3700 ký tự (suffix `(1/N)` / `(2/N)`).
+- Retry 3 lần với exponential backoff khi Telegram trả 429 (rate limit) hoặc 5xx; tôn trọng `parameters.retry_after`. Cấu hình `TELEGRAM_MAX_RETRY`.
+
+Cảnh báo tự động:
+
+- **Empty streak**: nếu mode `On change` và scan trả về rỗng `SCAN_EMPTY_STREAK_THRESHOLD` lần liên tiếp (mặc định 3), bắn 1 alert để khỏi bị silent fail.
+- **Circuit breaker**: nếu scan lỗi `SCAN_FAILURE_THRESHOLD` lần liên tiếp (mặc định 5), job tự `enabled=false` + bắn alert Telegram (luôn gửi, kể cả khi mute).
+
+## Lưu Lịch Sử
+
+Store local:
+
+```text
+data/scan-store.json
+```
+
+File này chứa:
+
+- Danh sách job.
+- Lịch sử các lần quét.
+- Kết quả từng lần quét.
+- Trạng thái gửi Telegram.
+
+Retention mặc định:
+
+```env
+SCAN_HISTORY_RETENTION_DAYS=3
+```
+
+Scanner tự prune lịch sử cũ khi start và định kỳ trong lúc chạy.
+
+## API Chính
+
+```text
+GET    /health                          # Full health + scanner stats
+GET    /scan-settings                   # Min interval, thresholds, telegram status
+GET    /scan-jobs                       # List all jobs
+GET    /scan-jobs/:id                   # Get job detail
+POST   /scan-jobs                       # Create job
+PATCH  /scan-jobs/:id                   # Update job (partial)
+DELETE /scan-jobs/:id                   # Delete job + runs + notifications
+POST   /scan-jobs/:id/run-now           # Manual trigger
+GET    /scan-jobs/:id/runs?limit=50     # History runs of one job
+GET    /scan-runs/:id                   # Get one run detail
+GET    /scan-notifications?limit=50&status=sent|failed&jobId=...  # Audit Telegram delivery
+POST   /notifications/telegram/test     # Send test Telegram message
+```
+
+`/health.scanner` trả về thêm `jobCount`, `enabledJobCount`, `nextScheduledRun`, `recentFailures`, `notificationFailures24h`, `lastRun` để monitor không cần gọi thêm endpoint.
+
+Ví dụ tạo job quét mỗi 60 phút:
+
+```json
+{
+  "name": "VJ125 HAN-SGN 14-05-2026",
+  "enabled": true,
+  "query": {
+    "from": "HAN",
+    "to": "SGN",
+    "date": "2026-05-14",
+    "airline": "VJ",
+    "flightNumber": "VJ125",
+    "departureTimeStart": "06:00",
+    "departureTimeEnd": "12:00",
+    "directOnly": true,
+    "adt": 1,
+    "chd": 0,
+    "inf": 0
+  },
+  "schedule": {
+    "intervalValue": 60,
+    "intervalUnit": "minutes"
+  },
+  "notify": {
+    "telegramEnabled": true,
+    "mode": "every_run",
+    "notifyOnError": true,
+    "muted": false
+  }
+}
+```
+
+Ví dụ tạo job quét mỗi 5 giây để test:
+
+```json
+{
+  "name": "Test VJ125 every 5s",
+  "enabled": true,
+  "query": {
+    "from": "HAN",
+    "to": "SGN",
+    "date": "2026-05-14",
+    "airline": "VJ",
+    "flightNumber": "VJ125",
+    "departureTimeStart": "06:00",
+    "departureTimeEnd": "12:00",
+    "directOnly": true,
+    "adt": 1
+  },
+  "schedule": {
+    "intervalValue": 5,
+    "intervalUnit": "seconds"
+  },
+  "notify": {
+    "telegramEnabled": true,
+    "mode": "every_run"
+  }
+}
+```
+
+## CLI Nam Thanh/Muadi
+
+Các lệnh CLI vẫn dùng được để debug backend trực tiếp.
+
+Login hoặc refresh session:
+
+```powershell
+npm run login
+```
+
+Tìm chuyến:
+
+```powershell
+npm run journey -- --from HAN --to SGN --date 14-05-2026 --airline VJ
+```
+
+Xem giá một chuyến theo giờ bay:
+
+```powershell
+npm run price -- --from HAN --to SGN --date 14-05-2026 --airline VJ --time 07:00
+```
+
+Giữ chỗ dry-run:
+
+```powershell
+npm run hold -- --from HAN --to SGN --date 14-05-2026 --airline VJ --time 07:00 --passenger "MR Nguyen Van A" --dry-run
+```
+
+Không chạy giữ chỗ thật nếu chưa kiểm tra kỹ passenger/contact/payment policy.
+
+## Cấu Trúc Thư Mục
+
+```text
+.
+├── public/
+│   ├── index.html
+│   ├── app.js
+│   └── styles.css
 ├── src/
-│   ├── index.js                 # Entry point
-│   ├── config.js                # Selectors + config
-│   ├── login.js                 # Logic login + retry
-│   ├── ddddocr-client.js        # Client gọi ddddocr API
-│   ├── inspect-login-page.js    # Tool khám phá trang login
-│   └── test-ocr.js              # Test ddddocr riêng
-├── debug/                 # Output của inspect
-├── screenshots/           # Screenshots mỗi lần chạy
-└── session/
-    └── storage-state.json  # Cookie đã save (tái sử dụng)
+│   ├── server.js
+│   ├── scanner/
+│   │   ├── index.js
+│   │   ├── scan-service.js
+│   │   ├── store.js
+│   │   └── telegram.js
+│   ├── booking-workflow.js
+│   ├── muadi-client.js
+│   ├── login.js
+│   └── config.js
+├── data/
+│   ├── airports.json
+│   └── scan-store.json        # ignored
+├── session/                   # ignored
+├── screenshots/               # ignored
+├── ocr_server.py
+├── package.json
+└── .env                       # ignored
 ```
 
 ## Troubleshooting
 
-### "ddddocr API không phản hồi"
+Kiểm tra backend:
 
-Kiểm tra ddddocr:
-```bash
-curl http://localhost:8000/health
-docker ps | grep ddddocr   # nếu dùng Docker
+```powershell
+Invoke-RestMethod http://127.0.0.1:3100/health
 ```
 
-### "Không tìm thấy username input"
+Kiểm tra scanner:
 
-1. Chạy `npm run inspect` để xem HTML thực tế
-2. Mở `debug/03-form-inputs.json` xem danh sách inputs
-3. Cập nhật selector trong `src/config.js`
+```powershell
+Invoke-RestMethod http://127.0.0.1:3100/scan-settings
+```
 
-### OCR đọc captcha sai > 50%
+Kiểm tra OCR:
 
-- Thử `charsetRange` khác trong `.env`:
-  - `0` = chỉ số
-  - `5` = chữ HOA + số
-  - `6` = tất cả
-- Kiểm tra ảnh captcha trong `screenshots/captcha-attempt-*.png`
-- Nếu captcha có nhiều nhiễu, cân nhắc chuyển sang CapSolver
+```powershell
+Invoke-RestMethod http://127.0.0.1:8001/health
+```
 
-### "Đã thử 5 lần mà captcha vẫn sai"
+Nếu Telegram không gửi:
 
-- Tăng `MAX_CAPTCHA_RETRY` trong `.env`
-- Check `screenshots/` xem captcha trông thế nào
-- Có thể trang đã thay đổi captcha sang dạng slide/click → cần update code
+- Kiểm tra `TELEGRAM_BOT_TOKEN`.
+- Kiểm tra `TELEGRAM_CHAT_ID`.
+- Bấm `Test Telegram` trên UI.
+- Xem response của `POST /notifications/telegram/test`.
 
-## Bước tiếp theo
+Nếu không quét được giá:
 
-Sau khi login thành công ổn định, có thể mở rộng:
+- Kiểm tra session Nam Thanh đã login chưa.
+- Chạy `npm run login`.
+- Kiểm tra `MUADI_AES_KEY` và `MUADI_AES_IV`.
+- Kiểm tra route/date/airline/flight number có đúng không.
+- Mở `History` để xem lỗi cụ thể của run.
 
-1. **Module tra giá vé** — dùng session đã lưu để gọi API tra giá vé
-2. **Schedule chạy định kỳ** — dùng cron hoặc n8n trigger
-3. **Tích hợp vào APG Manager RMS** — convert thành NestJS service
-4. **Refresh session tự động** — khi cookie hết hạn, login lại
+Nếu UI không cập nhật:
 
-## Lưu ý an toàn
+- Bấm `Ctrl + F5`.
+- Đảm bảo backend đã restart sau khi sửa code.
 
-- ⚠️ Đọc ToS của booking.namthanh.vn trước khi deploy production
-- ⚠️ Đổi password ngay nếu đã từng gửi qua chat/email
-- ⚠️ Không commit `.env`, `session/`, `screenshots/` lên GitHub
-- ⚠️ Dùng VPN/proxy riêng nếu chạy từ IP server (tránh bị flag)
-- ⚠️ Thêm rate limit (không chạy liên tục quá nhanh)
+## Deploy Server Sau Khi Test Ổn
+
+Khi chuyển từ local sang server:
+
+- Đặt `NODE_ENV=production`.
+- Đặt `BACKEND_API_KEY`.
+- Đặt `BACKEND_ALLOW_NO_AUTH=false`.
+- Chạy backend bằng process manager như PM2 hoặc Docker.
+- Mount volume cho `session/` và `data/scan-store.json`.
+- Giữ `SCAN_MIN_INTERVAL_SECONDS` đủ cao hoặc tắt quét theo giây ở production.
+- Cân nhắc chuyển local JSON store sang SQLite/Postgres nếu số job lớn hoặc cần multi-instance.
+
+## Bảo Mật
+
+- Không commit `.env`.
+- Không commit `session/storage-state.json`.
+- Không commit `data/scan-store.json` nếu có dữ liệu thật.
+- Không gửi token Telegram, mật khẩu Nam Thanh hoặc access token qua log/chat.
+- Khi deploy public, bắt buộc bật API key và giới hạn CORS.

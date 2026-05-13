@@ -6,6 +6,8 @@
 # Session/cookies
 session/
 storage-state.json
+data/scan-store.json
+data/scan-store.json.*.tmp
 
 # Screenshots (có thể chứa thông tin nhạy cảm)
 screenshots/
