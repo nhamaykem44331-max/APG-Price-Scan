@@ -195,7 +195,7 @@ function validateJob(job) {
 function normalizeJobInput(input = {}, existing = null) {
   const now = nowIso();
   const query = mergeQueryInput(input, existing && existing.query);
-  const scheduleInput = { ...((existing && existing.schedule) || {}), ...(input.schedule || {}) };
+  const scheduleInput = { ...(input.schedule || {}) };
   if (Object.prototype.hasOwnProperty.call(input, 'intervalSeconds')) {
     scheduleInput.intervalSeconds = input.intervalSeconds;
   }
