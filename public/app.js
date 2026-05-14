@@ -13,6 +13,14 @@ function apiKey() {
   return localStorage.getItem('priceScanApiKey') || '';
 }
 
+function requireApiKey() {
+  if (apiKey()) return true;
+  toast('Nhap BACKEND_API_KEY roi bam Save key truoc khi thao tac.', 'error');
+  const input = $('apiKeyInput');
+  if (input) input.focus();
+  return false;
+}
+
 async function apiFetch(path, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
@@ -451,9 +459,17 @@ async function loadHealth() {
   try {
     const health = await apiFetch('/health');
     const scanner = health.scanner || {};
+    state.settings = {
+      ...(state.settings || {}),
+      telegramConfigured: !!scanner.telegramConfigured,
+      zaloConfigured: !!scanner.zaloConfigured,
+      minIntervalSeconds: scanner.minIntervalSeconds || state.settings?.minIntervalSeconds,
+      minIntervalMinutes: scanner.minIntervalMinutes || state.settings?.minIntervalMinutes,
+    };
     const telegram = scanner.telegramConfigured ? 'Telegram ready' : 'Telegram missing';
     const zalo = scanner.zaloConfigured ? 'Zalo ready' : 'Zalo missing';
     $('systemStatus').textContent = `Backend: ${health.ok ? 'ok' : 'needs attention'} | ${telegram} | ${zalo}`;
+    updateNotifyStatus();
   } catch (error) {
     $('systemStatus').textContent = `Backend status: ${error.message}`;
   }
@@ -478,6 +494,7 @@ async function loadRuns(jobId) {
 
 async function saveJob(event) {
   event.preventDefault();
+  if (!requireApiKey()) return;
   const id = $('jobId').value;
   const payload = jobPayloadFromForm();
 
@@ -508,6 +525,7 @@ async function saveJob(event) {
 }
 
 async function runJob(id) {
+  if (!requireApiKey()) return;
   const jobId = id || $('jobId').value;
   if (!jobId) {
     toast('Save the job first', 'error');
@@ -530,6 +548,7 @@ async function runJob(id) {
 }
 
 async function deleteJob() {
+  if (!requireApiKey()) return;
   const jobId = $('jobId').value;
   if (!jobId) {
     clearForm();
@@ -551,6 +570,7 @@ async function deleteJob() {
 }
 
 async function testNotify() {
+  if (!requireApiKey()) return;
   const channel = $('notifyChannelInput') ? $('notifyChannelInput').value : 'telegram';
   const text = `Price Scan ${channel} test ${new Date().toISOString()}`;
   const button = $('notifyTestBtn');
@@ -613,7 +633,6 @@ async function init() {
     $('retentionLabel').textContent = '';
     $('jobsList').innerHTML = '<div class="empty-state">Nhap API key va bam "Save key" de quan ly job tren server.</div>';
     renderRuns([]);
-    updateNotifyStatus();
     return;
   }
   await Promise.all([loadSettings(), loadHealth(), loadJobs()]);
