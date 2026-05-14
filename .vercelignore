@@ -1,0 +1,15 @@
+.env
+.env.local
+.env.*.local
+.git
+.vercel
+.venv
+node_modules
+coverage
+playwright-report
+test-results
+screenshots
+session
+data/scan-store.json
+data/scan-store.json.*.tmp
+*.log

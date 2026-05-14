@@ -16,6 +16,7 @@ debug/
 # Local assistant/tooling state
 .claude/
 .kilo/
+.vercel/
 
 # Node
 node_modules/

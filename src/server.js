@@ -3222,13 +3222,15 @@ function statusForError(error) {
   return 500;
 }
 
-function createServer() {
-  return http.createServer((req, res) => {
-    res.req = req;
-    dispatch(req, res).catch((error) => {
-      sendJson(res, statusForError(error), errorPayload(error), req);
-    });
+function handleRequest(req, res) {
+  res.req = req;
+  return dispatch(req, res).catch((error) => {
+    sendJson(res, statusForError(error), errorPayload(error), req);
   });
+}
+
+function createServer() {
+  return http.createServer(handleRequest);
 }
 
 async function shutdown(server, signal) {
@@ -3269,6 +3271,7 @@ if (require.main === module) {
 
 module.exports = {
   createServer,
+  handleRequest,
   toPublicFlight,
   cacheSearch,
   searchCache,
