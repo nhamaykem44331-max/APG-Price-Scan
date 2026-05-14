@@ -74,6 +74,7 @@ describe('zalo notifier', () => {
     expect(payload).toMatchObject({
       event: 'price_scan.report',
       channel: 'zalo',
+      content: 'Price Scan report',
       summaryText: 'Price Scan report',
       zaloTargetId: 'zalo_target_1',
       zaloThreadType: 1,
@@ -100,6 +101,7 @@ describe('zalo notifier', () => {
       'https://n8n.test/webhook/price-scan-zalo',
       expect.objectContaining({
         event: 'price_scan.test',
+        content: 'Hello Zalo',
         summaryText: 'Hello Zalo',
         zaloTargetId: 'zalo_target_1',
         zaloThreadType: 1,

@@ -317,6 +317,7 @@ Webhook nhận các field chính từ backend:
 
 ```json
 {
+  "content": "noi dung bao cao",
   "summaryText": "noi dung bao cao",
   "zaloTargetId": "user_or_group_id",
   "zaloThreadType": 1,

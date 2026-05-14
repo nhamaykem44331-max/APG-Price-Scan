@@ -25,6 +25,7 @@ function buildZaloWebhookPayload(job, run, text, messageIndex = 1, messageCount 
   return {
     event: 'price_scan.report',
     channel: 'zalo',
+    content: text,
     summaryText: text,
     messageIndex,
     messageCount,
@@ -147,6 +148,7 @@ async function sendZaloMessage(text) {
   const payload = {
     event: 'price_scan.test',
     channel: 'zalo',
+    content: message,
     summaryText: message,
     messageIndex: 1,
     messageCount: 1,
