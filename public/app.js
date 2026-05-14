@@ -28,6 +28,9 @@ async function apiFetch(path, options = {}) {
   const text = await response.text();
   const data = text ? JSON.parse(text) : {};
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('API key chua dung hoac chua duoc luu. Nhap BACKEND_API_KEY roi bam Save key.');
+    }
     throw new Error(data.error || `HTTP ${response.status}`);
   }
   return data;
@@ -566,10 +569,23 @@ async function testNotify() {
 
 function bindEvents() {
   $('apiKeyInput').value = apiKey();
-  $('saveApiKeyBtn').addEventListener('click', () => {
-    localStorage.setItem('priceScanApiKey', $('apiKeyInput').value.trim());
-    toast('API key saved', 'success');
-    init().catch((error) => toast(error.message, 'error'));
+  $('saveApiKeyBtn').addEventListener('click', async () => {
+    const key = $('apiKeyInput').value.trim();
+    if (!key) {
+      toast('Nhap API key truoc khi luu', 'error');
+      return;
+    }
+    await withBusyButton($('saveApiKeyBtn'), async () => {
+      localStorage.setItem('priceScanApiKey', key);
+      try {
+        await apiFetch('/scan-settings');
+        toast('API key hop le', 'success');
+        await init();
+      } catch (error) {
+        localStorage.removeItem('priceScanApiKey');
+        toast(error.message, 'error');
+      }
+    });
   });
   const toggleKeyBtn = $('toggleApiKeyBtn');
   if (toggleKeyBtn) {
@@ -592,6 +608,14 @@ function bindEvents() {
 }
 
 async function init() {
+  if (!apiKey()) {
+    await loadHealth();
+    $('retentionLabel').textContent = '';
+    $('jobsList').innerHTML = '<div class="empty-state">Nhap API key va bam "Save key" de quan ly job tren server.</div>';
+    renderRuns([]);
+    updateNotifyStatus();
+    return;
+  }
   await Promise.all([loadSettings(), loadHealth(), loadJobs()]);
 }
 
