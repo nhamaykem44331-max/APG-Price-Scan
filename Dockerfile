@@ -6,9 +6,7 @@ ENV NODE_ENV=production \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     HEADLESS=true \
     LOGIN_SKIP_SCREENSHOTS=true \
-    DDDDOCR_API_URL=http://127.0.0.1:8001 \
-    BACKEND_PORT=3100 \
-    PORT=3100
+    DDDDOCR_API_URL=http://127.0.0.1:8001
 
 COPY package*.json ./
 RUN npm ci --omit=dev
@@ -20,6 +18,8 @@ RUN apt-get update \
 
 COPY . .
 
-EXPOSE 3100
+RUN mkdir -p /app/storage/session /app/storage/data /app/storage/screenshots
+
+EXPOSE 10000
 
 CMD ["sh", "-c", "python3 ocr_server.py 8001 & npm run api"]
