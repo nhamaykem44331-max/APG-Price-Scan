@@ -349,14 +349,32 @@ label > select,
   gap: 8px;
 }
 
-.api-key-wrap {
+.admin-login-box {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: var(--apg-radius-md);
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.api-key-input {
-  width: 200px;
+.admin-login-box.login-required {
+  background: var(--apg-danger-soft);
+  border-color: var(--apg-danger);
+}
+
+.admin-login-input {
+  width: 150px;
+}
+
+.admin-login-input[type="password"] {
+  width: 170px;
+}
+
+.input-error {
+  border-color: var(--apg-danger) !important;
+  box-shadow: 0 0 0 3px var(--apg-danger-soft) !important;
 }
 
 .theme-toggle {
@@ -841,7 +859,12 @@ label > select,
     flex-wrap: wrap;
   }
 
-  .api-key-input {
+  .admin-login-box {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .admin-login-input {
     flex: 1 1 180px;
     width: auto;
   }

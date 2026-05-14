@@ -5,19 +5,41 @@ const state = {
   runsCache: [],
   runsShownCount: 10,
   refreshTimer: null,
+  auth: { authenticated: false, username: null },
+  authNoticeShown: false,
 };
 
 const $ = (id) => document.getElementById(id);
 
-function apiKey() {
-  return localStorage.getItem('priceScanApiKey') || '';
+function clearLoginRequired() {
+  state.authNoticeShown = false;
+  const box = $('adminLoginBox');
+  if (box) box.classList.remove('login-required');
+  ['adminUsernameInput', 'adminPasswordInput'].forEach((id) => {
+    const input = $(id);
+    if (input) input.classList.remove('input-error');
+  });
 }
 
-function requireApiKey() {
-  if (apiKey()) return true;
-  toast('Nhap BACKEND_API_KEY roi bam Save key truoc khi thao tac.', 'error');
-  const input = $('apiKeyInput');
-  if (input) input.focus();
+function markLoginRequired() {
+  state.auth = { authenticated: false, username: null };
+  const box = $('adminLoginBox');
+  const userInput = $('adminUsernameInput');
+  const passInput = $('adminPasswordInput');
+  if (box) box.classList.add('login-required');
+  if (userInput) userInput.classList.add('input-error');
+  if (passInput) passInput.classList.add('input-error');
+  if (!state.authNoticeShown) {
+    toast('Đăng nhập để sử dụng hệ thống.', 'error');
+    state.authNoticeShown = true;
+  }
+  if (userInput && !userInput.value.trim()) userInput.focus();
+  else if (passInput) passInput.focus();
+}
+
+function requireAdminLogin() {
+  if (state.auth && state.auth.authenticated) return true;
+  markLoginRequired();
   return false;
 }
 
@@ -26,18 +48,18 @@ async function apiFetch(path, options = {}) {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
   };
-  const key = apiKey();
-  if (key) headers['X-API-Key'] = key;
 
   const response = await fetch(path, {
     ...options,
     headers,
+    credentials: 'same-origin',
   });
   const text = await response.text();
   const data = text ? JSON.parse(text) : {};
   if (!response.ok) {
     if (response.status === 401) {
-      throw new Error('API key chua dung hoac chua duoc luu. Nhap BACKEND_API_KEY roi bam Save key.');
+      markLoginRequired();
+      throw new Error(data.error || 'Đăng nhập để sử dụng hệ thống.');
     }
     throw new Error(data.error || `HTTP ${response.status}`);
   }
@@ -460,7 +482,7 @@ async function loadHealth() {
     const health = await apiFetch('/health');
     const scanner = health.scanner || null;
     if (!scanner) {
-      $('systemStatus').textContent = `Backend: ${health.ok ? 'ok' : 'cần chú ý'} · nhập API key để xem scanner`;
+      $('systemStatus').textContent = `Backend: ${health.ok ? 'ok' : 'cần chú ý'} · đăng nhập để xem scanner`;
       renderStats(null);
       updateNotifyStatus();
       return;
@@ -508,7 +530,7 @@ function formatRelative(iso) {
 
 function renderStats(scanner) {
   if (!scanner) {
-    setStat('total', '—', apiKey() ? 'chưa kết nối' : 'cần API key');
+    setStat('total', '—', state.auth.authenticated ? 'chưa kết nối' : 'cần đăng nhập');
     setStat('active', '—', 'ẩn');
     setStat('next', '—', '—');
     setStat('fails', '—', '—');
@@ -543,7 +565,7 @@ async function loadRuns(jobId) {
 
 async function saveJob(event) {
   event.preventDefault();
-  if (!requireApiKey()) return;
+  if (!requireAdminLogin()) return;
   const id = $('jobId').value;
   const payload = jobPayloadFromForm();
 
@@ -574,7 +596,7 @@ async function saveJob(event) {
 }
 
 async function runJob(id, triggerButton) {
-  if (!requireApiKey()) return;
+  if (!requireAdminLogin()) return;
   const jobId = id || $('jobId').value;
   if (!jobId) {
     toast('Save the job first', 'error');
@@ -601,7 +623,7 @@ async function runJob(id, triggerButton) {
 }
 
 async function deleteJob() {
-  if (!requireApiKey()) return;
+  if (!requireAdminLogin()) return;
   const jobId = $('jobId').value;
   if (!jobId) {
     clearForm();
@@ -623,7 +645,7 @@ async function deleteJob() {
 }
 
 async function testNotify() {
-  if (!requireApiKey()) return;
+  if (!requireAdminLogin()) return;
   const channel = $('notifyChannelInput') ? $('notifyChannelInput').value : 'telegram';
   const text = `Price Scan ${channel} test ${new Date().toISOString()}`;
   const button = $('notifyTestBtn');
@@ -676,34 +698,92 @@ function toggleTheme() {
   applyTheme(next);
 }
 
-function bindEvents() {
-  $('apiKeyInput').value = apiKey();
-  $('saveApiKeyBtn').addEventListener('click', async () => {
-    const key = $('apiKeyInput').value.trim();
-    if (!key) {
-      toast('Nhap API key truoc khi luu', 'error');
-      return;
-    }
-    await withBusyButton($('saveApiKeyBtn'), async () => {
-      localStorage.setItem('priceScanApiKey', key);
-      try {
-        await apiFetch('/scan-settings');
-        toast('API key hop le', 'success');
-        await init();
-      } catch (error) {
-        localStorage.removeItem('priceScanApiKey');
-        toast(error.message, 'error');
-      }
-    });
-  });
-  const toggleKeyBtn = $('toggleApiKeyBtn');
-  if (toggleKeyBtn) {
-    toggleKeyBtn.addEventListener('click', () => {
-      const input = $('apiKeyInput');
-      input.type = input.type === 'password' ? 'text' : 'password';
-      toggleKeyBtn.textContent = input.type === 'password' ? '👁' : '🙈';
-    });
+function updateAuthUi() {
+  const loggedIn = !!(state.auth && state.auth.authenticated);
+  const userInput = $('adminUsernameInput');
+  const passInput = $('adminPasswordInput');
+  const loginBtn = $('adminLoginBtn');
+  const logoutBtn = $('adminLogoutBtn');
+  if (userInput) {
+    userInput.disabled = loggedIn;
+    if (loggedIn && state.auth.username) userInput.value = state.auth.username;
   }
+  if (passInput) {
+    passInput.disabled = loggedIn;
+    if (loggedIn) passInput.value = '';
+  }
+  if (loginBtn) loginBtn.hidden = loggedIn;
+  if (logoutBtn) logoutBtn.hidden = !loggedIn;
+}
+
+async function loadAdminSession() {
+  const data = await apiFetch('/admin/session');
+  state.auth = {
+    authenticated: !!data.authenticated,
+    username: data.username || null,
+    expiresAt: data.expiresAt || null,
+  };
+  if (state.auth.authenticated) clearLoginRequired();
+  updateAuthUi();
+  return state.auth;
+}
+
+async function loginAdmin() {
+  const username = $('adminUsernameInput').value.trim();
+  const password = $('adminPasswordInput').value;
+  if (!username || !password) {
+    markLoginRequired();
+    return;
+  }
+  await withBusyButton($('adminLoginBtn'), async () => {
+    try {
+      const data = await apiFetch('/admin/login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      });
+      state.auth = {
+        authenticated: !!data.authenticated,
+        username: data.username || username,
+        expiresAt: data.expiresAt || null,
+      };
+      localStorage.setItem('priceScanAdminUser', state.auth.username || username);
+      clearLoginRequired();
+      updateAuthUi();
+      toast('Đã đăng nhập', 'success');
+      await init();
+    } catch (error) {
+      markLoginRequired();
+      toast(error.message, 'error');
+    }
+  });
+}
+
+async function logoutAdmin() {
+  await withBusyButton($('adminLogoutBtn'), async () => {
+    try {
+      await apiFetch('/admin/logout', { method: 'POST', body: '{}' });
+    } catch (_) {
+      // Clear local state even if the network request fails.
+    }
+    state.auth = { authenticated: false, username: null };
+    updateAuthUi();
+    markLoginRequired();
+    $('jobsList').innerHTML = '<div class="empty-state">Đăng nhập để quản lý job trên server.</div>';
+    renderRuns([]);
+    await loadHealth();
+  });
+}
+
+function bindEvents() {
+  $('adminUsernameInput').value = localStorage.getItem('priceScanAdminUser') || 'tanphuapg';
+  $('adminLoginBtn').addEventListener('click', () => loginAdmin());
+  $('adminLogoutBtn').addEventListener('click', () => logoutAdmin());
+  $('adminPasswordInput').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') loginAdmin();
+  });
+  ['adminUsernameInput', 'adminPasswordInput'].forEach((id) => {
+    $(id).addEventListener('input', clearLoginRequired);
+  });
   const themeBtn = $('themeToggleBtn');
   if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
   $('notifyTestBtn').addEventListener('click', () => testNotify());
@@ -719,10 +799,11 @@ function bindEvents() {
 }
 
 async function init() {
-  if (!apiKey()) {
+  await loadAdminSession();
+  if (!state.auth.authenticated) {
     await loadHealth();
     $('retentionLabel').textContent = '';
-    $('jobsList').innerHTML = '<div class="empty-state">Nhap API key va bam "Save key" de quan ly job tren server.</div>';
+    $('jobsList').innerHTML = '<div class="empty-state">Đăng nhập để quản lý job trên server.</div>';
     renderRuns([]);
     return;
   }

@@ -107,6 +107,10 @@ PORT=3100
 
 BACKEND_ALLOW_NO_AUTH=true
 BACKEND_API_KEY=
+ADMIN_USERNAME=tanphuapg
+ADMIN_PASSWORD=8888
+ADMIN_SESSION_SECRET=change_to_a_long_random_value_on_server
+ADMIN_SESSION_TTL_SECONDS=43200
 
 MUADI_AES_KEY=your_muadi_aes_key
 MUADI_AES_IV=your_muadi_aes_iv
@@ -138,14 +142,17 @@ BACKEND_ALLOW_NO_AUTH=true
 BACKEND_API_KEY=
 ```
 
-Che do local co bao ve API key:
+Che do local co login admin:
 
 ```env
 BACKEND_ALLOW_NO_AUTH=false
-BACKEND_API_KEY=use_a_long_random_value_here
+BACKEND_API_KEY=
+ADMIN_USERNAME=tanphuapg
+ADMIN_PASSWORD=8888
+ADMIN_SESSION_SECRET=use_a_long_random_value_here
 ```
 
-Khi bat che do co API key, can paste dung gia tri `BACKEND_API_KEY` vao o `API key` tren goc phai frontend va bam `Save key`.
+Khi bat che do login admin, nhap `ADMIN_USERNAME` va `ADMIN_PASSWORD` vao cum User/Password tren goc phai frontend roi bam `Login`.
 
 Quy tac bao mat:
 
@@ -271,10 +278,10 @@ Mo:
 http://localhost:3100/
 ```
 
-Neu dang bat API key:
+Neu dang bat admin login:
 
-1. Paste `BACKEND_API_KEY` vao o API key.
-2. Bam `Save key`.
+1. Nhap user/pass admin vao cum User/Password.
+2. Bam `Login`.
 3. Tiep tuc thao tac job.
 
 Tao job scan:
@@ -443,13 +450,13 @@ http://localhost:3100/
 
 ## 16. Loi Thuong Gap
 
-### Backend bao thieu API key
+### Backend bao can dang nhap
 
-Nguyen nhan: `BACKEND_ALLOW_NO_AUTH=false` nhung request khong gui `BACKEND_API_KEY`.
+Nguyen nhan: `BACKEND_ALLOW_NO_AUTH=false` nhung user chua login admin hoac session da het han.
 
 Cach sua:
 
-- Paste `BACKEND_API_KEY` vao UI va bam `Save key`, hoac
+- Nhap `ADMIN_USERNAME` va `ADMIN_PASSWORD` tren UI roi bam `Login`, hoac
 - Neu chi test local, dat `BACKEND_ALLOW_NO_AUTH=true` roi restart backend.
 
 ### OCR khong reachable

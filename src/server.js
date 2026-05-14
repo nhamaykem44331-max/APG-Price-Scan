@@ -45,6 +45,14 @@ const BOOKING_CACHE_TTL_MS = Number.parseInt(process.env.BOOKING_CACHE_TTL_SECON
 const ANCILLARY_CACHE_TTL_MS = Number.parseInt(process.env.ANCILLARY_CACHE_TTL_SECONDS || '120', 10) * 1000;
 const API_KEY = process.env.BACKEND_API_KEY || process.env.API_SECRET_KEY || '';
 const ALLOW_NO_AUTH = String(process.env.BACKEND_ALLOW_NO_AUTH || '').toLowerCase() === 'true';
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || process.env.BACKEND_ADMIN_USERNAME || 'tanphuapg';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.BACKEND_ADMIN_PASSWORD || '8888';
+const ADMIN_SESSION_COOKIE = process.env.ADMIN_SESSION_COOKIE || 'price_scan_admin';
+const ADMIN_SESSION_TTL_SECONDS = Number.parseInt(
+  process.env.ADMIN_SESSION_TTL_SECONDS || process.env.BACKEND_ADMIN_SESSION_TTL_SECONDS || String(12 * 60 * 60),
+  10
+);
+let ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || process.env.BACKEND_ADMIN_SESSION_SECRET || '';
 const CORS_ORIGIN_RAW = process.env.BACKEND_CORS_ORIGIN || '*';
 const CORS_ALLOW_ALL = CORS_ORIGIN_RAW.trim() === '*';
 const CORS_ALLOWED_ORIGINS = CORS_ALLOW_ALL
@@ -62,9 +70,11 @@ function resolveCorsOrigin(req) {
   return CORS_ALLOWED_ORIGINS.has(origin) ? origin : '';
 }
 
-if (!API_KEY && !ALLOW_NO_AUTH) {
-  console.error('[FATAL] BACKEND_API_KEY is empty. Set BACKEND_API_KEY, or explicitly set BACKEND_ALLOW_NO_AUTH=true for local dev only.');
-  process.exit(1);
+if (!ADMIN_SESSION_SECRET) {
+  ADMIN_SESSION_SECRET = crypto.randomBytes(32).toString('hex');
+  if (require.main === module) {
+    console.warn('[auth] ADMIN_SESSION_SECRET is not set. Admin sessions will be invalidated on each process restart.');
+  }
 }
 
 const searchCache = new Map();
@@ -374,21 +384,112 @@ function authTokenFromRequest(req) {
   return match ? match[1] : '';
 }
 
+function parseCookies(req) {
+  const header = (req && req.headers && req.headers.cookie) || '';
+  const cookies = {};
+  String(header).split(';').forEach((part) => {
+    const idx = part.indexOf('=');
+    if (idx < 0) return;
+    const name = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (!name) return;
+    try {
+      cookies[name] = decodeURIComponent(value);
+    } catch (_) {
+      cookies[name] = value;
+    }
+  });
+  return cookies;
+}
+
+function isSecureRequest(req) {
+  const proto = String((req.headers && req.headers['x-forwarded-proto']) || '').split(',')[0].trim().toLowerCase();
+  return proto === 'https' || !!(req.socket && req.socket.encrypted) || process.env.NODE_ENV === 'production';
+}
+
+function signSessionPayload(payload) {
+  return crypto
+    .createHmac('sha256', ADMIN_SESSION_SECRET)
+    .update(payload)
+    .digest('base64url');
+}
+
+function timingSafeStringEqual(a, b) {
+  const left = crypto.createHash('sha256').update(String(a)).digest();
+  const right = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(left, right);
+}
+
+function createAdminSessionValue(username) {
+  const ttlSeconds = Number.isFinite(ADMIN_SESSION_TTL_SECONDS) && ADMIN_SESSION_TTL_SECONDS > 0
+    ? ADMIN_SESSION_TTL_SECONDS
+    : 12 * 60 * 60;
+  const payload = Buffer.from(JSON.stringify({
+    username,
+    exp: Date.now() + ttlSeconds * 1000,
+    nonce: crypto.randomBytes(12).toString('hex'),
+  })).toString('base64url');
+  return `${payload}.${signSessionPayload(payload)}`;
+}
+
+function readAdminSession(req) {
+  const value = parseCookies(req)[ADMIN_SESSION_COOKIE];
+  if (!value || !value.includes('.')) return null;
+  const [payload, signature] = value.split('.', 2);
+  const expected = signSessionPayload(payload);
+  if (!timingSafeStringEqual(signature, expected)) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!data || data.username !== ADMIN_USERNAME || Number(data.exp || 0) <= Date.now()) return null;
+    return {
+      username: data.username,
+      expiresAt: new Date(data.exp).toISOString(),
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function adminSessionCookie(value, req, maxAgeSeconds) {
+  const parts = [
+    `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(value || '')}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${Math.max(0, Number(maxAgeSeconds || 0))}`,
+  ];
+  if (isSecureRequest(req)) parts.push('Secure');
+  return parts.join('; ');
+}
+
+function hasValidApiKey(req) {
+  return !!API_KEY && authTokenFromRequest(req) === API_KEY;
+}
+
 function hasProtectedAccess(req) {
-  if (!API_KEY) return ALLOW_NO_AUTH;
-  return authTokenFromRequest(req) === API_KEY;
+  return ALLOW_NO_AUTH || hasValidApiKey(req) || !!readAdminSession(req);
+}
+
+function isPublicPath(pathname) {
+  return (
+    pathname === '/health' ||
+    pathname === '/airports' ||
+    pathname === '/admin/session' ||
+    pathname === '/admin/login' ||
+    pathname === '/admin/logout' ||
+    pathname === '/' ||
+    pathname === '/app' ||
+    pathname.startsWith('/static/')
+  );
 }
 
 function assertAuthorized(req, pathname) {
-  if (pathname === '/health' || pathname === '/airports') return;
-  if (pathname === '/' || pathname === '/app' || pathname.startsWith('/static/')) return;
-  if (!API_KEY) {
-    if (ALLOW_NO_AUTH) return;
-    throw new HttpError(503, 'Backend auth not configured. Set BACKEND_API_KEY or BACKEND_ALLOW_NO_AUTH=true.');
+  if (isPublicPath(pathname)) return;
+  if (hasProtectedAccess(req)) return;
+  if (authTokenFromRequest(req)) {
+    throw new HttpError(401, 'Invalid API key or expired admin session.');
   }
-  if (authTokenFromRequest(req) !== API_KEY) {
-    throw new HttpError(401, 'Invalid or missing API key. Use X-API-Key or Authorization: Bearer <key>.');
-  }
+  throw new HttpError(401, 'Login required. Sign in with admin username and password.');
 }
 
 function cleanCaches() {
@@ -2258,7 +2359,8 @@ async function handleHealth(options = {}) {
     ok,
     service: 'namthanh-auto-login',
     time: nowIso(),
-    auth: API_KEY ? 'api-key-required' : (ALLOW_NO_AUTH ? 'disabled-local' : 'misconfigured'),
+    auth: ALLOW_NO_AUTH ? 'disabled-local' : 'admin-session',
+    apiKeyFallback: !!API_KEY,
     session: { ...session, token },
     sessionManager: {
       loginInProgress: sessionMgr.loginInProgress,
@@ -2280,6 +2382,9 @@ async function handleHealth(options = {}) {
     endpoints: [
       'GET /health',
       'GET /health?probe=true',
+      'GET /admin/session',
+      'POST /admin/login',
+      'POST /admin/logout',
       'GET /airports',
       'GET /session/ensure',
       'GET /config/exchange-rate',
@@ -2994,6 +3099,42 @@ async function handleBookingStatus(sessionID, body = {}) {
   }, body);
 }
 
+function adminSessionStatus(req) {
+  const session = readAdminSession(req);
+  return {
+    success: true,
+    authenticated: !!session || ALLOW_NO_AUTH || hasValidApiKey(req),
+    username: session ? session.username : (ALLOW_NO_AUTH ? 'local-no-auth' : null),
+    expiresAt: session ? session.expiresAt : null,
+    authMode: ALLOW_NO_AUTH ? 'disabled-local' : 'admin-session',
+  };
+}
+
+function handleAdminLogin(body = {}) {
+  const username = String(body.username || '').trim();
+  const password = String(body.password || '');
+  if (
+    !timingSafeStringEqual(username, ADMIN_USERNAME) ||
+    !timingSafeStringEqual(password, ADMIN_PASSWORD)
+  ) {
+    throw new HttpError(401, 'Invalid username or password.');
+  }
+  const sessionValue = createAdminSessionValue(ADMIN_USERNAME);
+  const ttlSeconds = Number.isFinite(ADMIN_SESSION_TTL_SECONDS) && ADMIN_SESSION_TTL_SECONDS > 0
+    ? ADMIN_SESSION_TTL_SECONDS
+    : 12 * 60 * 60;
+  return {
+    payload: {
+      success: true,
+      authenticated: true,
+      username: ADMIN_USERNAME,
+      expiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+    },
+    cookieValue: sessionValue,
+    ttlSeconds,
+  };
+}
+
 async function dispatch(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname.replace(/\/+$/, '') || '/';
@@ -3013,6 +3154,11 @@ async function dispatch(req, res) {
   if (req.method === 'GET' && pathname === '/health') {
     const probe = url.searchParams.get('probe') === 'true';
     sendJson(res, 200, await handleHealth({ probe, includeScanner: hasProtectedAccess(req) }));
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/admin/session') {
+    sendJson(res, 200, adminSessionStatus(req));
     return;
   }
 
@@ -3089,6 +3235,29 @@ async function dispatch(req, res) {
   }
 
   const body = req.method === 'GET' ? {} : await readBody(req);
+
+  if (req.method === 'POST' && pathname === '/admin/login') {
+    const result = handleAdminLogin(body);
+    sendJson(
+      res,
+      200,
+      result.payload,
+      req,
+      { 'Set-Cookie': adminSessionCookie(result.cookieValue, req, result.ttlSeconds) }
+    );
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/admin/logout') {
+    sendJson(
+      res,
+      200,
+      { success: true, authenticated: false },
+      req,
+      { 'Set-Cookie': adminSessionCookie('', req, 0) }
+    );
+    return;
+  }
 
   if (req.method === 'POST' && pathname === '/config/exchange-rate') {
     sendJson(res, 200, await handleExchangeRate(body));
@@ -3263,7 +3432,7 @@ if (require.main === module) {
   const server = createServer();
   server.listen(DEFAULT_PORT, () => {
     console.log(`Nam Thanh backend API listening on http://localhost:${DEFAULT_PORT}`);
-    console.log(`Auth: ${API_KEY ? 'API key required' : (ALLOW_NO_AUTH ? 'DISABLED (BACKEND_ALLOW_NO_AUTH=true, local dev only)' : 'misconfigured')}`);
+    console.log(`Auth: ${ALLOW_NO_AUTH ? 'DISABLED (BACKEND_ALLOW_NO_AUTH=true, local dev only)' : `admin session (${ADMIN_USERNAME})`}${API_KEY ? ' + API key fallback' : ''}`);
     console.log('Endpoints: /, /health, /airports, /config/exchange-rate, /auth/login, /flights/search, /flights/search/stream, /flights/lowest-fare, /flights/price, /bookings/ancillaries, /bookings/hold, /scan-jobs');
 
     if (String(process.env.SCANNER_AUTO_START || 'true').toLowerCase() !== 'false') {

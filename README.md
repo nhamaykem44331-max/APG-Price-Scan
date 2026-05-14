@@ -94,6 +94,9 @@ MUADI_AES_IV=
 
 BACKEND_PORT=3100
 BACKEND_ALLOW_NO_AUTH=true
+ADMIN_USERNAME=tanphuapg
+ADMIN_PASSWORD=8888
+ADMIN_SESSION_SECRET=
 BACKEND_WARMUP=false
 
 SCAN_STORE_FILE=./data/scan-store.json
@@ -118,7 +121,8 @@ N8N_WEBHOOK_MAX_RETRY=3
 Ghi chú:
 
 - `BACKEND_ALLOW_NO_AUTH=true` chỉ nên dùng khi chạy local.
-- Khi deploy server, đặt `BACKEND_API_KEY` và tắt `BACKEND_ALLOW_NO_AUTH`.
+- Khi deploy server/Render, đặt `BACKEND_ALLOW_NO_AUTH=false`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` và `ADMIN_SESSION_SECRET`.
+- `BACKEND_API_KEY` chỉ còn là fallback cho script/client cũ, không còn là cách đăng nhập chính của UI.
 - Không commit `.env`, `session/`, `screenshots/`, `data/scan-store.json`.
 
 ## Chạy Local
@@ -551,8 +555,9 @@ Nếu UI không cập nhật:
 Khi chuyển từ local sang server:
 
 - Đặt `NODE_ENV=production`.
-- Đặt `BACKEND_API_KEY`.
 - Đặt `BACKEND_ALLOW_NO_AUTH=false`.
+- Đặt `ADMIN_USERNAME`, `ADMIN_PASSWORD` và `ADMIN_SESSION_SECRET`.
+- Chỉ đặt `BACKEND_API_KEY` nếu cần giữ fallback cho script/client cũ.
 - Chạy backend bằng process manager như PM2 hoặc Docker.
 - Mount volume cho `session/` và `data/scan-store.json`.
 - Giữ `SCAN_MIN_INTERVAL_SECONDS` đủ cao hoặc tắt quét theo giây ở production.
@@ -564,4 +569,4 @@ Khi chuyển từ local sang server:
 - Không commit `session/storage-state.json`.
 - Không commit `data/scan-store.json` nếu có dữ liệu thật.
 - Không gửi token Telegram, token n8n, mật khẩu Nam Thanh hoặc access token qua log/chat.
-- Khi deploy public, bắt buộc bật API key và giới hạn CORS.
+- Khi deploy public, bắt buộc bật admin login, đặt `ADMIN_SESSION_SECRET` mạnh và giới hạn CORS nếu có frontend khác origin.
