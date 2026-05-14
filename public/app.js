@@ -314,7 +314,7 @@ function renderJobs() {
   list.querySelectorAll('button[data-run-id]').forEach((button) => {
     button.addEventListener('click', async (event) => {
       event.stopPropagation();
-      await withBusyButton(button, () => runJob(button.dataset.runId));
+      await withBusyButton(button, () => runJob(button.dataset.runId, button));
     });
   });
 }
@@ -458,7 +458,13 @@ async function loadSettings() {
 async function loadHealth() {
   try {
     const health = await apiFetch('/health');
-    const scanner = health.scanner || {};
+    const scanner = health.scanner || null;
+    if (!scanner) {
+      $('systemStatus').textContent = `Backend: ${health.ok ? 'ok' : 'cần chú ý'} · nhập API key để xem scanner`;
+      renderStats(null);
+      updateNotifyStatus();
+      return;
+    }
     state.settings = {
       ...(state.settings || {}),
       telegramConfigured: !!scanner.telegramConfigured,
@@ -468,11 +474,54 @@ async function loadHealth() {
     };
     const telegram = scanner.telegramConfigured ? 'Telegram ready' : 'Telegram missing';
     const zalo = scanner.zaloConfigured ? 'Zalo ready' : 'Zalo missing';
-    $('systemStatus').textContent = `Backend: ${health.ok ? 'ok' : 'needs attention'} | ${telegram} | ${zalo}`;
+    $('systemStatus').textContent = `Backend: ${health.ok ? 'ok' : 'cần chú ý'} · ${telegram} · ${zalo}`;
+    renderStats(scanner);
     updateNotifyStatus();
   } catch (error) {
-    $('systemStatus').textContent = `Backend status: ${error.message}`;
+    $('systemStatus').textContent = `Backend: ${error.message}`;
+    renderStats(null);
   }
+}
+
+function setStat(name, value, sub) {
+  const card = document.querySelector(`.apg-stat[data-stat="${name}"]`);
+  if (!card) return;
+  const valueEl = card.querySelector('.stat-value');
+  const subEl = card.querySelector('.stat-sub');
+  if (valueEl) valueEl.textContent = value;
+  if (subEl && sub !== undefined) subEl.textContent = sub;
+}
+
+function formatRelative(iso) {
+  if (!iso) return '—';
+  const ms = Date.parse(iso) - Date.now();
+  if (!Number.isFinite(ms)) return iso;
+  const seconds = Math.round(ms / 1000);
+  const absSec = Math.abs(seconds);
+  if (absSec < 60) return seconds >= 0 ? `trong ${absSec}s` : `cách đây ${absSec}s`;
+  const minutes = Math.round(seconds / 60);
+  const absMin = Math.abs(minutes);
+  if (absMin < 60) return minutes >= 0 ? `trong ${absMin} phút` : `cách đây ${absMin} phút`;
+  const hours = Math.round(minutes / 60);
+  return hours >= 0 ? `trong ${hours}h` : `cách đây ${Math.abs(hours)}h`;
+}
+
+function renderStats(scanner) {
+  if (!scanner) {
+    setStat('total', '—', apiKey() ? 'chưa kết nối' : 'cần API key');
+    setStat('active', '—', 'ẩn');
+    setStat('next', '—', '—');
+    setStat('fails', '—', '—');
+    return;
+  }
+  const jobCount = Number(scanner.jobCount || 0);
+  const enabled = Number(scanner.enabledJobCount || 0);
+  const notifyFails24 = Number(scanner.notificationFailures24h || 0);
+  const recentFails = Number(scanner.recentFailures || 0);
+  setStat('total', String(jobCount), jobCount ? `${jobCount - enabled} pause` : 'chưa có job');
+  setStat('active', String(enabled), enabled ? 'đang lên lịch' : 'không có job active');
+  setStat('next', formatRelative(scanner.nextScheduledRun), scanner.lastRun ? `last: ${scanner.lastRun.status}` : 'chưa có lần nào');
+  setStat('fails', String(notifyFails24), `${recentFails} scan lỗi gần đây`);
 }
 
 async function loadJobs() {
@@ -524,7 +573,7 @@ async function saveJob(event) {
   });
 }
 
-async function runJob(id) {
+async function runJob(id, triggerButton) {
   if (!requireApiKey()) return;
   const jobId = id || $('jobId').value;
   if (!jobId) {
@@ -532,6 +581,8 @@ async function runJob(id) {
     return;
   }
   toast('Scan started…');
+  const runBtn = triggerButton || (!id ? $('runNowBtn') : null);
+  if (runBtn) runBtn.classList.add('btn-plane-busy');
   try {
     const data = await apiFetch(`/scan-jobs/${encodeURIComponent(jobId)}/run-now`, { method: 'POST', body: '{}' });
     state.selectedJobId = jobId;
@@ -544,6 +595,8 @@ async function runJob(id) {
     }
   } catch (error) {
     toast(error.message, 'error');
+  } finally {
+    if (runBtn) runBtn.classList.remove('btn-plane-busy');
   }
 }
 
@@ -587,6 +640,42 @@ async function testNotify() {
   });
 }
 
+const THEME_STORAGE_KEY = 'priceScanTheme';
+
+function getStoredTheme() {
+  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === 'light' || stored === 'dark') return stored;
+  return null;
+}
+
+function applyTheme(theme) {
+  const t = theme === 'dark' ? 'dark' : 'light';
+  if (t === 'dark') {
+    document.documentElement.setAttribute('data-apg-theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-apg-theme');
+  }
+  const btn = $('themeToggleBtn');
+  if (btn) btn.textContent = t === 'dark' ? '☀️' : '🌗';
+}
+
+function initTheme() {
+  const stored = getStoredTheme();
+  if (stored) {
+    applyTheme(stored);
+    return;
+  }
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(prefersDark ? 'dark' : 'light');
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-apg-theme') === 'dark' ? 'dark' : 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  localStorage.setItem(THEME_STORAGE_KEY, next);
+  applyTheme(next);
+}
+
 function bindEvents() {
   $('apiKeyInput').value = apiKey();
   $('saveApiKeyBtn').addEventListener('click', async () => {
@@ -615,6 +704,8 @@ function bindEvents() {
       toggleKeyBtn.textContent = input.type === 'password' ? '👁' : '🙈';
     });
   }
+  const themeBtn = $('themeToggleBtn');
+  if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
   $('notifyTestBtn').addEventListener('click', () => testNotify());
   $('refreshBtn').addEventListener('click', () => init().catch((error) => toast(error.message, 'error')));
   $('newJobBtn').addEventListener('click', clearForm);
@@ -623,7 +714,7 @@ function bindEvents() {
     button.addEventListener('click', () => setNotifyChannel(button.dataset.channel));
   });
   $('jobForm').addEventListener('submit', (event) => saveJob(event));
-  $('runNowBtn').addEventListener('click', () => runJob());
+  $('runNowBtn').addEventListener('click', () => runJob(null, $('runNowBtn')));
   $('deleteJobBtn').addEventListener('click', () => deleteJob());
 }
 
@@ -646,6 +737,7 @@ function startAutoRefresh() {
   }, 30000);
 }
 
+initTheme();
 bindEvents();
 clearForm();
 init().then(startAutoRefresh).catch((error) => toast(error.message, 'error'));

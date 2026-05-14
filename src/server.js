@@ -374,6 +374,11 @@ function authTokenFromRequest(req) {
   return match ? match[1] : '';
 }
 
+function hasProtectedAccess(req) {
+  if (!API_KEY) return ALLOW_NO_AUTH;
+  return authTokenFromRequest(req) === API_KEY;
+}
+
 function assertAuthorized(req, pathname) {
   if (pathname === '/health' || pathname === '/airports') return;
   if (pathname === '/' || pathname === '/app' || pathname.startsWith('/static/')) return;
@@ -2249,7 +2254,7 @@ async function handleHealth(options = {}) {
   const ok = !!session.ok && (!ocr.configured || ocr.reachable) && (!probe || probe.ok);
   const sessionMgr = sessionManagerStatus();
 
-  return {
+  const payload = {
     ok,
     service: 'namthanh-auto-login',
     time: nowIso(),
@@ -2264,7 +2269,6 @@ async function handleHealth(options = {}) {
     probe,
     ocr,
     exchangeRate: exchangeRateStatus,
-    scanner: scanner.settings(),
     cache: {
       searches: searchCache.size,
       searchResponses: searchResponseCache.size,
@@ -2299,6 +2303,12 @@ async function handleHealth(options = {}) {
       'POST /notifications/zalo/test',
     ],
   };
+
+  if (options.includeScanner) {
+    payload.scanner = scanner.settings();
+  }
+
+  return payload;
 }
 
 async function handleLogin(body) {
@@ -3002,7 +3012,7 @@ async function dispatch(req, res) {
 
   if (req.method === 'GET' && pathname === '/health') {
     const probe = url.searchParams.get('probe') === 'true';
-    sendJson(res, 200, await handleHealth({ probe }));
+    sendJson(res, 200, await handleHealth({ probe, includeScanner: hasProtectedAccess(req) }));
     return;
   }
 

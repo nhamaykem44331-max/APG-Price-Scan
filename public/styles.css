@@ -1,16 +1,92 @@
+/* ----------------------------------------------------------------------------
+ * Price Scan admin UI — APG design system
+ * Aligned with tanphuapg.com (Tan Phu APG aviation booking).
+ * Tokens prefixed --apg-* mirror the parent project's globals.css.
+ * -------------------------------------------------------------------------- */
+
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 :root {
   color-scheme: light;
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f0f3f5;
-  --text: #17202a;
-  --muted: #64717f;
-  --line: #d8dee5;
-  --primary: #0f766e;
-  --primary-hover: #115e59;
-  --danger: #b42318;
-  --warning: #a15c07;
-  --shadow: 0 10px 24px rgba(23, 32, 42, 0.08);
+
+  /* Surfaces */
+  --apg-bg-page: #f4f3ef;
+  --apg-bg-surface: #ffffff;
+  --apg-bg-surface-soft: #e9eef2;
+  --apg-bg-surface-muted: #eef2f5;
+
+  /* Text */
+  --apg-text-primary: #0f2f4b;
+  --apg-text-secondary: #5e7288;
+  --apg-text-muted: #8090a0;
+  --apg-text-inverse: #ffffff;
+
+  /* Brand */
+  --apg-aviation-navy: #143b5f;
+  --apg-aviation-navy-hover: #0f2f4b;
+  --apg-aviation-navy-soft: rgba(20, 59, 95, 0.12);
+  --apg-brand-gold: #c8a85a;
+  --apg-brand-gold-hover: #b08f3e;
+  --apg-brand-gold-soft: rgba(200, 168, 90, 0.18);
+
+  /* Status */
+  --apg-success: #2e7d5b;
+  --apg-success-soft: rgba(46, 125, 91, 0.14);
+  --apg-warning: #c27a1a;
+  --apg-warning-soft: rgba(194, 122, 26, 0.16);
+  --apg-danger: #c84c3a;
+  --apg-danger-soft: rgba(200, 76, 58, 0.14);
+
+  /* Borders & radius */
+  --apg-border: #d6dce3;
+  --apg-border-strong: #b9c2cc;
+  --apg-border-focus: rgba(20, 59, 95, 0.32);
+  --apg-radius-xs: 4px;
+  --apg-radius-sm: 6px;
+  --apg-radius-md: 8px;
+  --apg-radius-lg: 10px;
+
+  /* Shadows */
+  --apg-shadow-xs: 0 1px 2px rgba(15, 47, 75, 0.06);
+  --apg-shadow-sm: 0 2px 6px rgba(15, 47, 75, 0.08);
+  --apg-shadow-md: 0 8px 20px rgba(15, 47, 75, 0.10);
+  --apg-shadow-lg: 0 18px 38px rgba(15, 47, 75, 0.14);
+
+  /* Compat aliases for legacy class names */
+  --bg: var(--apg-bg-page);
+  --surface: var(--apg-bg-surface);
+  --surface-2: var(--apg-bg-surface-soft);
+  --text: var(--apg-text-primary);
+  --muted: var(--apg-text-secondary);
+  --line: var(--apg-border);
+  --primary: var(--apg-aviation-navy);
+  --primary-hover: var(--apg-aviation-navy-hover);
+  --danger: var(--apg-danger);
+  --warning: var(--apg-warning);
+  --shadow: var(--apg-shadow-sm);
+}
+
+[data-apg-theme="dark"] {
+  color-scheme: dark;
+  --apg-bg-page: #0a0f15;
+  --apg-bg-surface: #131b24;
+  --apg-bg-surface-soft: #1c2530;
+  --apg-bg-surface-muted: #161e27;
+  --apg-text-primary: #ededed;
+  --apg-text-secondary: #a4b0bd;
+  --apg-text-muted: #6c7785;
+  --apg-text-inverse: #0f2f4b;
+  --apg-aviation-navy: #5fa1e1;
+  --apg-aviation-navy-hover: #7ab3ea;
+  --apg-aviation-navy-soft: rgba(95, 161, 225, 0.18);
+  --apg-brand-gold: #d8b969;
+  --apg-brand-gold-hover: #e6c87f;
+  --apg-border: #283341;
+  --apg-border-strong: #3b4a5d;
+  --apg-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --apg-shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.5);
+  --apg-shadow-md: 0 8px 20px rgba(0, 0, 0, 0.55);
+  --apg-shadow-lg: 0 18px 38px rgba(0, 0, 0, 0.6);
 }
 
 * {
@@ -20,11 +96,13 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: var(--bg);
-  color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--apg-bg-page);
+  color: var(--apg-text-primary);
+  font-family: 'Be Vietnam Pro', Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,
@@ -33,18 +111,45 @@ select {
   font: inherit;
 }
 
+/* ─── Typography helpers ──────────────────────────────────────────────────── */
+
+.apg-eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--apg-text-secondary);
+}
+
+.apg-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.apg-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────────────── */
+
 button {
-  min-height: 36px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
+  min-height: 38px;
+  border: 1px solid var(--apg-border);
+  border-radius: var(--apg-radius-sm);
+  background: var(--apg-bg-surface);
+  color: var(--apg-text-primary);
   padding: 0 14px;
+  font-weight: 600;
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
 }
 
 button:hover {
-  border-color: #b8c3ce;
+  border-color: var(--apg-border-strong);
+}
+
+button:active {
+  transform: translateY(1px);
 }
 
 button:disabled,
@@ -54,142 +159,188 @@ button.busy {
   pointer-events: none;
 }
 
-.icon-btn {
-  min-height: 36px;
-  width: 36px;
-  padding: 0;
-  font-size: 16px;
-}
-
-.toggle-btn {
-  min-width: 50px;
-  font-weight: 700;
-}
-
-.toggle-btn.toggle-on {
-  background: #dff5ee;
-  color: #0f6b4f;
-  border-color: #b7e3d4;
-}
-
-.toggle-btn.toggle-off {
-  background: var(--surface-2);
-  color: var(--muted);
-}
-
-.api-key-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.job-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 button[type="submit"],
-#runNowBtn {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: white;
+.btn-primary {
+  background: var(--apg-aviation-navy);
+  border-color: var(--apg-aviation-navy);
+  color: var(--apg-text-inverse);
 }
 
 button[type="submit"]:hover,
-#runNowBtn:hover {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+.btn-primary:hover {
+  background: var(--apg-aviation-navy-hover);
+  border-color: var(--apg-aviation-navy-hover);
+}
+
+#runNowBtn,
+.btn-gold {
+  background: linear-gradient(135deg, var(--apg-brand-gold) 0%, var(--apg-brand-gold-hover) 100%);
+  border-color: var(--apg-brand-gold-hover);
+  color: var(--apg-text-inverse);
+}
+
+#runNowBtn:hover,
+.btn-gold:hover {
+  filter: brightness(1.05);
+  border-color: var(--apg-brand-gold-hover);
 }
 
 button.danger {
-  color: var(--danger);
+  background: var(--apg-bg-surface);
+  border-color: var(--apg-danger);
+  color: var(--apg-danger);
 }
+
+button.danger:hover {
+  background: var(--apg-danger-soft);
+}
+
+.icon-btn {
+  min-height: 38px;
+  width: 38px;
+  padding: 0;
+  font-size: 15px;
+}
+
+.toggle-btn {
+  min-width: 52px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.toggle-btn.toggle-on {
+  background: var(--apg-success-soft);
+  color: var(--apg-success);
+  border-color: var(--apg-success);
+}
+
+.toggle-btn.toggle-off {
+  background: var(--apg-bg-surface-soft);
+  color: var(--apg-text-muted);
+}
+
+/* ─── Inputs ─────────────────────────────────────────────────────────────── */
 
 input,
 select {
   width: 100%;
-  height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: white;
-  color: var(--text);
-  padding: 0 10px;
+  height: 44px;
+  border: 1px solid var(--apg-border);
+  border-radius: var(--apg-radius-sm);
+  background: var(--apg-bg-surface);
+  color: var(--apg-text-primary);
+  padding: 0 12px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 input:focus,
 select:focus {
-  border-color: var(--primary);
-  outline: 2px solid rgba(15, 118, 110, 0.18);
+  border-color: var(--apg-aviation-navy);
+  outline: 2px solid var(--apg-border-focus);
+  outline-offset: 1px;
 }
 
-label {
-  display: grid;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
+input[disabled],
+input:disabled {
+  background: var(--apg-bg-surface-muted);
+  color: var(--apg-text-muted);
 }
 
+label,
 .field {
   display: grid;
   gap: 6px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.channel-switch {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-  height: 38px;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface-2);
-}
-
-.channel-option {
-  min-height: 30px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--muted);
+  color: var(--apg-text-secondary);
+  font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.channel-option.active {
-  background: var(--surface);
-  color: var(--primary);
-  box-shadow: 0 1px 4px rgba(23, 32, 42, 0.12);
+label > input,
+label > select,
+.field > input,
+.field > select {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
 }
+
+/* ─── App shell & header ─────────────────────────────────────────────────── */
 
 .app-shell {
-  width: min(1440px, 100%);
+  width: min(1280px, 100%);
   margin: 0 auto;
-  padding: 18px;
+  padding: 22px 24px 40px;
 }
 
 .topbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  min-height: 74px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--line);
+  padding-bottom: 18px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--apg-border);
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--apg-aviation-navy);
+  letter-spacing: 0.02em;
+}
+
+.brand-mark::before {
+  content: '✈';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--apg-aviation-navy);
+  color: var(--apg-brand-gold);
+  border-radius: var(--apg-radius-sm);
+  font-size: 16px;
+  transform: rotate(-25deg);
+}
+
+.brand-mark a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand-mark a:hover {
+  color: var(--apg-aviation-navy-hover);
+}
+
+.brand-sep {
+  color: var(--apg-text-muted);
+  font-weight: 500;
 }
 
 .topbar h1 {
-  margin: 0 0 2px;
+  margin: 0;
   font-size: 22px;
   line-height: 1.2;
+  color: var(--apg-text-primary);
+  font-weight: 700;
 }
 
 .topbar p {
-  margin: 0;
-  color: var(--muted);
+  margin: 4px 0 0;
+  color: var(--apg-text-secondary);
+  font-size: 12px;
 }
 
 .topbar-actions {
@@ -198,13 +349,88 @@ label {
   gap: 8px;
 }
 
-.api-key-input {
-  width: 180px;
+.api-key-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
+
+.api-key-input {
+  width: 200px;
+}
+
+.theme-toggle {
+  min-width: 38px;
+}
+
+/* ─── Stat strip ─────────────────────────────────────────────────────────── */
+
+.apg-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.apg-stat {
+  position: relative;
+  padding: 14px 16px 16px;
+  background: var(--apg-bg-surface);
+  border: 1px solid var(--apg-border);
+  border-radius: var(--apg-radius-md);
+  box-shadow: var(--apg-shadow-xs);
+  overflow: hidden;
+}
+
+.apg-stat::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--apg-aviation-navy);
+}
+
+.apg-stat.stat-active::before {
+  background: var(--apg-success);
+}
+
+.apg-stat.stat-next::before {
+  background: var(--apg-brand-gold);
+}
+
+.apg-stat.stat-fails::before {
+  background: var(--apg-danger);
+}
+
+.apg-stat .stat-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--apg-text-muted);
+  font-weight: 700;
+}
+
+.apg-stat .stat-value {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--apg-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.apg-stat .stat-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--apg-text-secondary);
+}
+
+/* ─── Layout & panels ────────────────────────────────────────────────────── */
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(320px, 420px) minmax(320px, 1fr);
+  grid-template-columns: minmax(320px, 440px) minmax(320px, 1fr);
   grid-template-areas:
     "form jobs"
     "form runs";
@@ -213,43 +439,41 @@ label {
 }
 
 .panel {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
+  background: var(--apg-bg-surface);
+  border: 1px solid var(--apg-border);
+  border-radius: var(--apg-radius-md);
+  box-shadow: var(--apg-shadow-sm);
+  overflow: hidden;
 }
 
-.form-panel {
-  grid-area: form;
-}
-
-.jobs-panel {
-  grid-area: jobs;
-}
-
-.runs-panel {
-  grid-area: runs;
-}
+.form-panel { grid-area: form; }
+.jobs-panel { grid-area: jobs; }
+.runs-panel { grid-area: runs; }
 
 .panel-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 54px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--line);
+  min-height: 52px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--apg-border);
+  background: var(--apg-bg-surface-muted);
 }
 
 .panel-title h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--apg-text-secondary);
 }
 
 .job-form {
   display: grid;
-  gap: 13px;
-  padding: 14px;
+  gap: 14px;
+  padding: 16px;
 }
 
 .grid-2 {
@@ -269,14 +493,18 @@ label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--text);
+  color: var(--apg-text-primary);
   font-size: 13px;
   font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .inline-check input {
   width: 16px;
   height: 16px;
+  margin: 0;
+  accent-color: var(--apg-aviation-navy);
 }
 
 .form-actions {
@@ -284,6 +512,42 @@ label {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* ─── Channel chip selector ──────────────────────────────────────────────── */
+
+.channel-switch {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--apg-bg-surface-muted);
+  border: 1px solid var(--apg-border);
+  border-radius: var(--apg-radius-md);
+  height: 44px;
+}
+
+.channel-option {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: var(--apg-text-secondary);
+  border-radius: var(--apg-radius-sm);
+  font-size: 13px;
+  padding: 0;
+  letter-spacing: 0.04em;
+}
+
+.channel-option:hover {
+  background: var(--apg-bg-surface-soft);
+}
+
+.channel-option.active {
+  background: var(--apg-aviation-navy);
+  color: var(--apg-text-inverse);
+}
+
+/* ─── Jobs list ──────────────────────────────────────────────────────────── */
 
 .jobs-list,
 .runs-list {
@@ -296,8 +560,9 @@ label {
 .run-row {
   display: grid;
   gap: 6px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--apg-border);
+  animation: apgRowIn 0.25s ease;
 }
 
 .job-row:last-child,
@@ -309,14 +574,16 @@ label {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .job-row:hover {
-  background: var(--surface-2);
+  background: var(--apg-bg-surface-soft);
 }
 
 .job-row.active {
-  box-shadow: inset 3px 0 0 var(--primary);
+  background: var(--apg-bg-surface-soft);
+  box-shadow: inset 4px 0 0 var(--apg-aviation-navy);
 }
 
 .job-title,
@@ -326,6 +593,7 @@ label {
   gap: 8px;
   min-width: 0;
   font-weight: 700;
+  color: var(--apg-text-primary);
 }
 
 .job-title span,
@@ -336,44 +604,56 @@ label {
 }
 
 .job-meta,
-.run-meta,
-.result-line {
-  color: var(--muted);
+.run-meta {
+  color: var(--apg-text-secondary);
   font-size: 12px;
 }
+
+.result-line {
+  color: var(--apg-text-primary);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.job-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ─── Badges ─────────────────────────────────────────────────────────────── */
 
 .badge {
   display: inline-flex;
   align-items: center;
   min-height: 22px;
   border-radius: 999px;
-  padding: 0 8px;
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: 12px;
+  padding: 0 10px;
+  background: var(--apg-bg-surface-soft);
+  color: var(--apg-text-secondary);
+  font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .badge.ok {
-  background: #dff5ee;
-  color: #0f6b4f;
+  background: var(--apg-success-soft);
+  color: var(--apg-success);
 }
 
 .badge.error {
-  background: #ffe3df;
-  color: var(--danger);
+  background: var(--apg-danger-soft);
+  color: var(--apg-danger);
 }
 
 .badge.warn {
-  background: #fff0d3;
-  color: var(--warning);
+  background: var(--apg-warning-soft);
+  color: var(--apg-warning);
 }
 
-.run-results {
-  display: grid;
-  gap: 4px;
-  margin-top: 4px;
-}
+/* ─── Change indicators ──────────────────────────────────────────────────── */
 
 .run-changes {
   display: flex;
@@ -387,55 +667,65 @@ label {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--apg-text-secondary);
 }
 
 .change {
   display: inline-flex;
   align-items: center;
-  height: 18px;
-  border-radius: 4px;
-  padding: 0 6px;
+  height: 20px;
+  border-radius: var(--apg-radius-xs);
+  padding: 0 7px;
   font-size: 11px;
   font-weight: 700;
-  background: var(--surface-2);
-  color: var(--text);
+  letter-spacing: 0.04em;
+  background: var(--apg-bg-surface-soft);
+  color: var(--apg-text-primary);
 }
 
 .change.change-up {
-  background: #ffe3df;
-  color: var(--danger);
+  background: var(--apg-danger-soft);
+  color: var(--apg-danger);
 }
 
 .change.change-down {
-  background: #dff5ee;
-  color: #0f6b4f;
+  background: var(--apg-success-soft);
+  color: var(--apg-success);
 }
 
 .change.change-sold {
-  background: var(--danger);
-  color: white;
+  background: var(--apg-danger);
+  color: var(--apg-text-inverse);
 }
 
 .change.change-seat {
-  background: #fff0d3;
-  color: var(--warning);
+  background: var(--apg-warning-soft);
+  color: var(--apg-warning);
 }
 
 .change.change-new {
-  background: #e0f2fe;
-  color: #075985;
+  background: var(--apg-aviation-navy-soft);
+  color: var(--apg-aviation-navy);
 }
 
 .change.change-removed {
-  background: #ede9fe;
-  color: #5b21b6;
+  background: var(--apg-brand-gold-soft);
+  color: var(--apg-brand-gold-hover);
+}
+
+/* ─── Run history ────────────────────────────────────────────────────────── */
+
+.run-results {
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
 }
 
 .runs-more {
   padding: 10px 14px;
   text-align: center;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--apg-border);
+  background: var(--apg-bg-surface-muted);
 }
 
 .runs-more button {
@@ -444,38 +734,100 @@ label {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--apg-text-muted);
   font-size: 12px;
 }
 
 .empty-state {
-  padding: 18px 14px;
-  color: var(--muted);
+  padding: 22px 16px;
+  color: var(--apg-text-muted);
+  font-size: 13px;
+  text-align: center;
 }
+
+/* ─── Toast ──────────────────────────────────────────────────────────────── */
 
 .toast {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
-  max-width: min(420px, calc(100vw - 36px));
-  border-radius: 8px;
-  background: #17202a;
-  color: white;
-  padding: 12px 14px;
-  box-shadow: var(--shadow);
-  z-index: 20;
+  right: 22px;
+  bottom: 22px;
+  max-width: min(440px, calc(100vw - 44px));
+  border-radius: var(--apg-radius-md);
+  background: var(--apg-aviation-navy);
+  color: var(--apg-text-inverse);
+  padding: 13px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--apg-shadow-lg);
+  z-index: 30;
+  border-left: 4px solid var(--apg-brand-gold);
 }
 
 .toast.toast-error {
-  background: var(--danger);
+  background: var(--apg-danger);
+  border-left-color: #8a2e22;
 }
 
 .toast.toast-success {
-  background: #0f6b4f;
+  background: var(--apg-success);
+  border-left-color: #1e5240;
 }
 
 .toast.toast-info {
-  background: #17202a;
+  background: var(--apg-aviation-navy);
+}
+
+/* ─── Aviation flourish: plane fly + row-in animations ───────────────────── */
+
+@keyframes apgRowIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes apgPlaneFly {
+  0% {
+    transform: translateX(-12px) rotate(-12deg);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateX(8px) rotate(-12deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(28px) rotate(-12deg);
+    opacity: 0;
+  }
+}
+
+.btn-plane-busy::after {
+  content: '✈';
+  display: inline-block;
+  margin-left: 8px;
+  animation: apgPlaneFly 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .apg-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 980px) {
@@ -491,6 +843,7 @@ label {
 
   .api-key-input {
     flex: 1 1 180px;
+    width: auto;
   }
 
   .layout {
@@ -504,7 +857,11 @@ label {
 
 @media (max-width: 560px) {
   .app-shell {
-    padding: 12px;
+    padding: 14px 14px 40px;
+  }
+
+  .apg-stats {
+    grid-template-columns: 1fr;
   }
 
   .grid-2 {

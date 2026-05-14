@@ -1,40 +1,70 @@
 <!doctype html>
-<html lang="en">
+<html lang="vi">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Price Scan</title>
+    <title>Price Scan · Tan Phu APG</title>
     <link rel="stylesheet" href="/static/styles.css">
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <div>
-          <h1>Price Scan</h1>
-          <p id="systemStatus">Backend status: checking</p>
+        <div class="topbar-brand">
+          <div>
+            <div class="brand-mark">
+              <a href="https://tanphuapg.com" target="_blank" rel="noopener">TAN PHU APG</a>
+              <span class="brand-sep">▸</span>
+              <span>Price Scan</span>
+            </div>
+            <p id="systemStatus">Backend status: checking…</p>
+          </div>
         </div>
         <div class="topbar-actions">
           <div class="api-key-wrap">
             <input id="apiKeyInput" class="api-key-input" type="password" placeholder="API key">
-            <button id="toggleApiKeyBtn" type="button" class="icon-btn" title="Show/hide API key">👁</button>
+            <button id="toggleApiKeyBtn" type="button" class="icon-btn" title="Hiện/ẩn API key">👁</button>
           </div>
           <button id="saveApiKeyBtn" type="button">Save key</button>
           <button id="notifyTestBtn" type="button">Test Notify</button>
+          <button id="themeToggleBtn" type="button" class="icon-btn theme-toggle" title="Đổi sáng/tối">🌗</button>
         </div>
       </header>
+
+      <section class="apg-stats" id="apgStats">
+        <div class="apg-stat" data-stat="total">
+          <div class="stat-label">Total jobs</div>
+          <div class="stat-value">—</div>
+          <div class="stat-sub">—</div>
+        </div>
+        <div class="apg-stat stat-active" data-stat="active">
+          <div class="stat-label">Active</div>
+          <div class="stat-value">—</div>
+          <div class="stat-sub">đang lên lịch</div>
+        </div>
+        <div class="apg-stat stat-next" data-stat="next">
+          <div class="stat-label">Next run</div>
+          <div class="stat-value">—</div>
+          <div class="stat-sub">job gần nhất</div>
+        </div>
+        <div class="apg-stat stat-fails" data-stat="fails">
+          <div class="stat-label">Notify fails 24h</div>
+          <div class="stat-value">—</div>
+          <div class="stat-sub">scan lỗi gần đây</div>
+        </div>
+      </section>
 
       <main class="layout">
         <section class="panel form-panel">
           <div class="panel-title">
-            <h2>Scan job</h2>
-            <button id="newJobBtn" type="button">New</button>
+            <h2>Scan Job</h2>
+            <button id="newJobBtn" type="button">+ New</button>
           </div>
 
           <form id="jobForm" class="job-form">
             <input id="jobId" type="hidden">
 
             <label>
-              Name
+              Tên job
               <input id="jobName" type="text" placeholder="VJ125 HAN-SGN">
             </label>
 
@@ -51,22 +81,22 @@
 
             <div class="grid-2">
               <label>
-                Flight date
+                Ngày bay
                 <input id="dateInput" type="date" required>
               </label>
               <label>
-                Airline
+                Hãng
                 <input id="airlineInput" type="text" maxlength="3" value="VJ">
               </label>
             </div>
 
             <div class="grid-2">
               <label>
-                Flight number
+                Số hiệu
                 <input id="flightInput" type="text" value="VJ125">
               </label>
               <label>
-                Exact time
+                Giờ chính xác
                 <input id="timeInput" type="time">
               </label>
             </div>
@@ -88,7 +118,7 @@
                 <input id="intervalInput" type="number" min="5" step="1" value="60" required>
               </label>
               <label>
-                Interval unit
+                Đơn vị
                 <select id="intervalUnitInput">
                   <option value="minutes">Minutes</option>
                   <option value="seconds">Seconds</option>
@@ -105,9 +135,9 @@
                 </select>
               </label>
               <div class="field">
-                Notify platform
+                Kênh báo
                 <input id="notifyChannelInput" type="hidden" value="telegram">
-                <div class="channel-switch" role="group" aria-label="Notify platform">
+                <div class="channel-switch" role="group" aria-label="Kênh báo">
                   <button type="button" class="channel-option active" data-channel="telegram">Telegram</button>
                   <button type="button" class="channel-option" data-channel="zalo">Zalo</button>
                 </div>
@@ -116,11 +146,11 @@
 
             <div class="grid-2">
               <label>
-                Adults
+                Số khách
                 <input id="adultInput" type="number" min="1" step="1" value="1" required>
               </label>
               <label>
-                Notify status
+                Trạng thái kênh
                 <input id="notifyStatusInput" type="text" value="Telegram" disabled>
               </label>
             </div>
@@ -155,7 +185,7 @@
         <section class="panel jobs-panel">
           <div class="panel-title">
             <h2>Jobs</h2>
-            <button id="refreshBtn" type="button">Refresh</button>
+            <button id="refreshBtn" type="button">↻ Refresh</button>
           </div>
           <div id="jobsList" class="jobs-list"></div>
         </section>
