@@ -1,5 +1,9 @@
 # Price Scan - Nam Thanh Flight Fare Scanner
 
+## Huong Dan Deploy Localhost
+
+Xem [docs/LOCALHOST_DEPLOY.md](docs/LOCALHOST_DEPLOY.md) de deploy va test day du du an tren localhost.
+
 Ứng dụng local để tự động quét giá vé máy bay thật từ hệ thống Nam Thanh/booking.namthanh.vn, lưu lịch sử giá và gửi báo cáo qua Telegram Bot hoặc Zalo qua n8n webhook.
 
 ## Tính Năng Chính
