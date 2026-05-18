@@ -339,13 +339,28 @@ function staticFileForPath(pathname) {
 function sendStatic(req, res, pathname) {
   const filePath = staticFileForPath(pathname);
   if (!filePath || !fs.existsSync(filePath)) return false;
+  // Use mtime as ETag + force browser to revalidate every load. Prevents stale
+  // bundle bug khi rewrite HTML/JS/CSS mà browser vẫn dùng cache cũ.
+  let etag = '';
+  try {
+    const st = fs.statSync(filePath);
+    etag = `"${st.mtimeMs.toString(36)}-${st.size.toString(36)}"`;
+  } catch (_) { /* ignore */ }
   const headers = {
     'Content-Type': staticContentType(filePath),
-    'Cache-Control': 'no-cache',
+    'Cache-Control': 'no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
     'Vary': 'Origin',
   };
+  if (etag) headers.ETag = etag;
   const origin = resolveCorsOrigin(req);
   if (origin) headers['Access-Control-Allow-Origin'] = origin;
+  if (etag && req.headers['if-none-match'] === etag) {
+    res.writeHead(304, headers);
+    res.end();
+    return true;
+  }
   res.writeHead(200, headers);
   fs.createReadStream(filePath).pipe(res);
   return true;
@@ -2402,6 +2417,9 @@ async function handleHealth(options = {}) {
       'DELETE /scan-jobs/:id',
       'POST /scan-jobs/:id/run-now',
       'GET /scan-jobs/:id/runs',
+      'GET /scan-jobs/:id/history',
+      'GET /activity',
+      'GET /health/extended',
       'GET /scan-notifications',
       'POST /notifications/test',
       'POST /notifications/telegram/test',
@@ -2410,7 +2428,7 @@ async function handleHealth(options = {}) {
   };
 
   if (options.includeScanner) {
-    payload.scanner = scanner.settings();
+    payload.scanner = scanner.settings({ extended: !!options.extended });
   }
 
   return payload;
@@ -3157,6 +3175,15 @@ async function dispatch(req, res) {
     return;
   }
 
+  if (req.method === 'GET' && pathname === '/health/extended') {
+    if (!hasProtectedAccess(req)) {
+      throw new HttpError(401, 'Unauthorized');
+    }
+    const probe = url.searchParams.get('probe') === 'true';
+    sendJson(res, 200, await handleHealth({ probe, includeScanner: true, extended: true }));
+    return;
+  }
+
   if (req.method === 'GET' && pathname === '/admin/session') {
     sendJson(res, 200, adminSessionStatus(req));
     return;
@@ -3213,13 +3240,28 @@ async function dispatch(req, res) {
     return;
   }
 
+  if (req.method === 'GET' && pathname === '/activity') {
+    const limitParam = Number.parseInt(url.searchParams.get('limit') || '50', 10);
+    if (!Number.isFinite(limitParam) || limitParam < 1 || limitParam > 200) {
+      throw new HttpError(400, 'Invalid limit');
+    }
+    const sinceParam = url.searchParams.get('since') || undefined;
+    const kindsParam = url.searchParams.get('kinds');
+    const kinds = kindsParam ? kindsParam.split(',').map((k) => k.trim()).filter(Boolean) : undefined;
+    sendJson(res, 200, {
+      ok: true,
+      activity: scanner.getActivity({ limit: limitParam, since: sinceParam, kinds }),
+    });
+    return;
+  }
+
   const scanRunsMatch = pathname.match(/^\/scan-runs\/([^/]+)$/);
   if (req.method === 'GET' && scanRunsMatch) {
     sendJson(res, 200, { success: true, run: scanner.getRun(decodeURIComponent(scanRunsMatch[1])) });
     return;
   }
 
-  const scanJobMatch = pathname.match(/^\/scan-jobs\/([^/]+)(?:\/(run-now|runs))?$/);
+  const scanJobMatch = pathname.match(/^\/scan-jobs\/([^/]+)(?:\/(run-now|runs|history))?$/);
   if (req.method === 'GET' && scanJobMatch && !scanJobMatch[2]) {
     sendJson(res, 200, { success: true, job: scanner.getJob(decodeURIComponent(scanJobMatch[1])) });
     return;
@@ -3231,6 +3273,21 @@ async function dispatch(req, res) {
       success: true,
       runs: scanner.listRuns(decodeURIComponent(scanJobMatch[1]), { limit }),
     });
+    return;
+  }
+
+  if (req.method === 'GET' && scanJobMatch && scanJobMatch[2] === 'history') {
+    const range = (url.searchParams.get('range') || '24h').toLowerCase();
+    if (!['1h', '24h', '7d', 'all'].includes(range)) {
+      throw new HttpError(400, 'Invalid range');
+    }
+    const bucketParam = url.searchParams.get('bucket');
+    const bucket = bucketParam ? bucketParam.toLowerCase() : undefined;
+    if (bucket && !['none', '15m', '1h', '1d'].includes(bucket)) {
+      throw new HttpError(400, 'Invalid bucket');
+    }
+    const result = scanner.getJobHistory(decodeURIComponent(scanJobMatch[1]), { range, bucket });
+    sendJson(res, 200, { ok: true, ...result });
     return;
   }
 

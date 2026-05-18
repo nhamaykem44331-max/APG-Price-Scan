@@ -44,3 +44,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# Local backups + archives (không commit)
+public.old/
+*.zip

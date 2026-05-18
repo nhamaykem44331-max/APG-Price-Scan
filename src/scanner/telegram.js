@@ -244,6 +244,7 @@ async function sendTelegramMessage(text, options = {}) {
         ok: true,
         messageId: data.result && data.result.message_id,
         chatId,
+        attempts: attempt,
       };
     }
 
@@ -276,11 +277,14 @@ async function sendScanReport(job, run) {
   const messages = buildScanReport(job, run);
   const list = Array.isArray(messages) ? messages : [messages];
   let lastResult = null;
+  let totalAttempts = 0;
   for (const text of list) {
     if (!text) continue;
     lastResult = await sendTelegramMessage(text);
+    totalAttempts += Number(lastResult && lastResult.attempts) || 1;
   }
-  return lastResult || { ok: false };
+  if (lastResult) lastResult.attempts = totalAttempts || 1;
+  return lastResult || { ok: false, attempts: 0 };
 }
 
 module.exports = {

@@ -2,12 +2,6 @@
    APG Price Scan — Operations Terminal redesign
    Tokens follow the parent project (tanphuapg.com) but extended
    with motion + data-viz primitives for an "aviation ops" feel.
-
-   Source: design_handoff_ui_redesign/design/styles.css (line 1-1616)
-   Imported verbatim per handoff README Section 9. Dev-only
-   `.tweaks-trigger` rule omitted (production strips Tweaks panel).
-   Legacy compat aliases appended at bottom (DESIGN_TOKENS Section 14)
-   so existing public/app.js doesn't crash before Step 4 rewrite.
    ============================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -1606,6 +1600,9 @@ button, input, select, textarea {
   }
 }
 
+/* Print/Tweaks-off pure render */
+.app[data-tweaks="off"] .tweaks-trigger { display: none; }
+
 /* Scrollbars (subtle) */
 .scroll-area {
   max-height: 460px;
@@ -1617,45 +1614,3 @@ button, input, select, textarea {
   border-radius: 999px;
 }
 .scroll-area::-webkit-scrollbar-track { background: transparent; }
-
-/* ============================================================
-   Toast (transitional)
-   Step 4 sẽ overhaul system feedback; minimal style giữ tránh
-   crash UI khi Step 3+4 chưa xong.
-   ============================================================ */
-.toast {
-  position: fixed;
-  right: 22px;
-  bottom: 22px;
-  max-width: min(420px, calc(100vw - 36px));
-  background: var(--apg-text-primary);
-  color: var(--apg-text-inverse);
-  padding: 12px 14px;
-  border-radius: var(--apg-radius-sm);
-  border-left: 4px solid var(--apg-brand-gold);
-  box-shadow: var(--apg-shadow-md);
-  z-index: 30;
-  font-size: 13px;
-  line-height: 1.4;
-}
-.toast[hidden] { display: none; }
-.toast.toast-error { background: var(--apg-danger); border-left-color: #8a2e22; }
-.toast.toast-success { background: var(--apg-success); border-left-color: #1e5240; }
-.toast.toast-info { background: var(--apg-text-primary); border-left-color: var(--apg-brand-gold); }
-
-/* ============================================================
-   Compat aliases — DESIGN_TOKENS.md Section 14
-   Cho các selector cũ trong public/app.js (Step 4 sẽ thay).
-   ============================================================ */
-:root {
-  --bg: var(--apg-bg-page);
-  --surface: var(--apg-bg-surface);
-  --surface-2: var(--apg-bg-surface-soft);
-  --text: var(--apg-text-primary);
-  --line: var(--apg-border);
-  --primary: var(--apg-aviation-navy);
-  --primary-hover: var(--apg-aviation-navy-hover);
-  --danger: var(--apg-danger);
-  --warning: var(--apg-warning);
-  --shadow: var(--apg-shadow-sm);
-}

@@ -1,207 +1,165 @@
 <!doctype html>
-<html lang="vi">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Price Scan · Tan Phu APG</title>
-    <link rel="stylesheet" href="/static/styles.css">
-  </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div class="topbar-brand">
-          <div>
-            <div class="brand-mark">
-              <a href="https://tanphuapg.com" target="_blank" rel="noopener">TAN PHU APG</a>
-              <span class="brand-sep">▸</span>
-              <span>Price Scan</span>
-            </div>
-            <p id="systemStatus">Backend status: checking…</p>
-          </div>
+<html lang="vi" data-apg-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#143b5f">
+  <title>APG Price Scan · Operations Terminal</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23143b5f'%3E%3Cpath d='M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.2.6-.6.5-1.1z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- ═══════ Sidebar (desktop) ═══════ -->
+    <aside class="sidebar" aria-label="Điều hướng chính">
+      <div class="sidebar-brand">
+        <div class="plane-mark" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.2.6-.6.5-1.1z"/></svg>
         </div>
-        <div class="topbar-actions">
-          <div id="adminLoginBox" class="admin-login-box">
-            <input id="adminUsernameInput" class="admin-login-input" type="text" autocomplete="username" placeholder="User">
-            <input id="adminPasswordInput" class="admin-login-input" type="password" autocomplete="current-password" placeholder="Password">
-            <button id="adminLoginBtn" type="button">Login</button>
-            <button id="adminLogoutBtn" type="button" hidden>Logout</button>
-          </div>
-          <button id="notifyTestBtn" type="button">Test Notify</button>
-          <button id="themeToggleBtn" type="button" class="icon-btn theme-toggle" title="Đổi sáng/tối">🌗</button>
+        <div class="brand-text">
+          <span class="top">TAN PHU APG</span>
+          <span class="bot">Price Scan</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" role="navigation">
+        <div class="nav-section">Operations</div>
+
+        <button type="button" class="nav-item active" data-route="dashboard" data-href="#/" aria-current="page">
+          <span class="ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          </span>
+          <span>Dashboard</span>
+        </button>
+
+        <button type="button" class="nav-item" data-route="jobs" data-href="#/jobs">
+          <span class="ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/><circle cx="6" cy="7" r="1.2" fill="currentColor"/><circle cx="6" cy="12" r="1.2" fill="currentColor"/><circle cx="6" cy="17" r="1.2" fill="currentColor"/></svg>
+          </span>
+          <span>Jobs</span>
+          <span class="nav-count" id="navJobCount">—</span>
+        </button>
+
+        <button type="button" class="nav-item" data-route="history" data-href="#/history">
+          <span class="ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          </span>
+          <span>History</span>
+        </button>
+
+        <button type="button" class="nav-item" data-route="notifications" data-href="#/notifications">
+          <span class="ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+          </span>
+          <span>Notifications</span>
+          <span class="nav-count" id="navNotifyCount" hidden></span>
+        </button>
+
+        <div class="nav-section">System</div>
+
+        <button type="button" class="nav-item" data-route="settings" data-href="#/settings">
+          <span class="ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </span>
+          <span>Settings</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="avatar" id="userAvatar" aria-hidden="true">AP</div>
+        <div class="who">
+          <span class="name" id="userName">Operations</span>
+          <span id="userMode">local-dev</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ═══════ Main canvas ═══════ -->
+    <div class="main">
+      <header class="topbar" role="banner">
+        <div class="topbar-search">
+          <span class="ico" aria-hidden="true" style="color:var(--apg-text-muted);">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </span>
+          <input id="globalSearch" type="search" placeholder="Tìm job, route, flight…" aria-label="Tìm kiếm">
+          <span class="kbd">/</span>
+        </div>
+
+        <div class="topbar-status" role="region" aria-label="Trạng thái hệ thống">
+          <span id="healthChip" class="health-chip" title="Trạng thái backend">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="healthLabel">checking</span>
+          </span>
+
+          <button id="apiKeyBtn" class="icon-btn" type="button" aria-label="Cấu hình API key" title="API key">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 7.79-7.78"/><path d="m18 5 2 2"/><path d="m21 2-3 3"/></svg>
+          </button>
+
+          <button id="themeToggleBtn" class="icon-btn" type="button" aria-label="Đổi giao diện sáng/tối" title="Theme">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+
+          <button id="refreshBtn" class="icon-btn" type="button" aria-label="Tải lại" title="Refresh">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
         </div>
       </header>
 
-      <section class="apg-stats" id="apgStats">
-        <div class="apg-stat" data-stat="total">
-          <div class="stat-label">Total jobs</div>
-          <div class="stat-value">—</div>
-          <div class="stat-sub">—</div>
-        </div>
-        <div class="apg-stat stat-active" data-stat="active">
-          <div class="stat-label">Active</div>
-          <div class="stat-value">—</div>
-          <div class="stat-sub">đang lên lịch</div>
-        </div>
-        <div class="apg-stat stat-next" data-stat="next">
-          <div class="stat-label">Next run</div>
-          <div class="stat-value">—</div>
-          <div class="stat-sub">job gần nhất</div>
-        </div>
-        <div class="apg-stat stat-fails" data-stat="fails">
-          <div class="stat-label">Notify fails 24h</div>
-          <div class="stat-value">—</div>
-          <div class="stat-sub">scan lỗi gần đây</div>
-        </div>
-      </section>
-
-      <main class="layout">
-        <section class="panel form-panel">
-          <div class="panel-title">
-            <h2>Scan Job</h2>
-            <button id="newJobBtn" type="button">+ New</button>
-          </div>
-
-          <form id="jobForm" class="job-form">
-            <input id="jobId" type="hidden">
-
-            <label>
-              Tên job
-              <input id="jobName" type="text" placeholder="VJ125 HAN-SGN">
-            </label>
-
-            <div class="grid-2">
-              <label>
-                From
-                <input id="fromInput" type="text" maxlength="3" value="HAN" required>
-              </label>
-              <label>
-                To
-                <input id="toInput" type="text" maxlength="3" value="SGN" required>
-              </label>
-            </div>
-
-            <div class="grid-2">
-              <label>
-                Ngày bay
-                <input id="dateInput" type="date" required>
-              </label>
-              <label>
-                Hãng
-                <input id="airlineInput" type="text" maxlength="3" value="VJ">
-              </label>
-            </div>
-
-            <div class="grid-2">
-              <label>
-                Số hiệu
-                <input id="flightInput" type="text" value="VJ125">
-              </label>
-              <label>
-                Giờ chính xác
-                <input id="timeInput" type="time">
-              </label>
-            </div>
-
-            <div class="grid-2">
-              <label>
-                Time from
-                <input id="timeStartInput" type="time" value="06:00">
-              </label>
-              <label>
-                Time to
-                <input id="timeEndInput" type="time" value="12:00">
-              </label>
-            </div>
-
-            <div class="grid-2">
-              <label>
-                Interval
-                <input id="intervalInput" type="number" min="5" step="1" value="60" required>
-              </label>
-              <label>
-                Đơn vị
-                <select id="intervalUnitInput">
-                  <option value="minutes">Minutes</option>
-                  <option value="seconds">Seconds</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="grid-2">
-              <label>
-                Notify mode
-                <select id="notifyModeInput">
-                  <option value="every_run">Every run</option>
-                  <option value="on_change">On change</option>
-                </select>
-              </label>
-              <div class="field">
-                Kênh báo
-                <input id="notifyChannelInput" type="hidden" value="telegram">
-                <div class="channel-switch" role="group" aria-label="Kênh báo">
-                  <button type="button" class="channel-option active" data-channel="telegram">Telegram</button>
-                  <button type="button" class="channel-option" data-channel="zalo">Zalo</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="grid-2">
-              <label>
-                Số khách
-                <input id="adultInput" type="number" min="1" step="1" value="1" required>
-              </label>
-              <label>
-                Trạng thái kênh
-                <input id="notifyStatusInput" type="text" value="Telegram" disabled>
-              </label>
-            </div>
-
-            <div class="toggles">
-              <label class="inline-check">
-                <input id="enabledInput" type="checkbox" checked>
-                Enabled
-              </label>
-              <label class="inline-check">
-                <input id="telegramInput" type="checkbox" checked>
-                Notifications
-              </label>
-              <label class="inline-check">
-                <input id="muteInput" type="checkbox">
-                Mute (vẫn quét, không báo)
-              </label>
-              <label class="inline-check">
-                <input id="directInput" type="checkbox" checked>
-                Direct only
-              </label>
-            </div>
-
-            <div class="form-actions">
-              <button type="submit">Save job</button>
-              <button id="runNowBtn" type="button">Run now</button>
-              <button id="deleteJobBtn" class="danger" type="button">Delete</button>
-            </div>
-          </form>
-        </section>
-
-        <section class="panel jobs-panel">
-          <div class="panel-title">
-            <h2>Jobs</h2>
-            <button id="refreshBtn" type="button">↻ Refresh</button>
-          </div>
-          <div id="jobsList" class="jobs-list"></div>
-        </section>
-
-        <section class="panel runs-panel">
-          <div class="panel-title">
-            <h2>History</h2>
-            <span id="retentionLabel" class="muted"></span>
-          </div>
-          <div id="runsList" class="runs-list"></div>
+      <main id="root" class="page" aria-live="polite" aria-busy="true">
+        <!-- Step 4 sẽ render Dashboard / Job Detail vào đây. -->
+        <section class="empty" id="bootEmpty">
+          <p><strong>Đang khởi tạo Operations Terminal…</strong></p>
+          <p>
+            Nếu màn hình này không tự cập nhật, mở DevTools console kiểm tra lỗi.
+            Đảm bảo backend đang chạy (<code>npm run api</code>) và <code>BACKEND_API_KEY</code> đã được lưu
+            (bấm 🔑 trên topbar) hoặc <code>BACKEND_ALLOW_NO_AUTH=true</code> trong <code>.env</code>.
+          </p>
+          <p class="muted" style="margin-top:18px;font-size:11px;">
+            (Bước 3: chỉ có shell sidebar + topbar. Dashboard / Job Detail sẽ được render bởi <code>public/app.js</code> ở Bước 4.)
+          </p>
         </section>
       </main>
     </div>
+  </div>
 
-    <div id="toast" class="toast" hidden></div>
-    <script src="/static/app.js"></script>
-  </body>
+  <!-- ═══════ Mobile tab bar (< 980px) ═══════ -->
+  <nav class="mobile-tabbar" aria-label="Mobile navigation">
+    <button type="button" class="tab active" data-route="dashboard" data-href="#/">
+      <span class="ico" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      </span>
+      <span>Dashboard</span>
+    </button>
+    <button type="button" class="tab" data-route="jobs" data-href="#/jobs">
+      <span class="ico" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/><circle cx="6" cy="7" r="1.2" fill="currentColor"/><circle cx="6" cy="12" r="1.2" fill="currentColor"/><circle cx="6" cy="17" r="1.2" fill="currentColor"/></svg>
+      </span>
+      <span>Jobs</span>
+    </button>
+    <button type="button" class="tab" data-route="history" data-href="#/history">
+      <span class="ico" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      </span>
+      <span>History</span>
+    </button>
+    <button type="button" class="tab" data-route="settings" data-href="#/settings">
+      <span class="ico" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </span>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <!-- ═══════ Toast (ARIA live region for screen readers) ═══════ -->
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+
+  <noscript>
+    <div class="empty" style="position:fixed;inset:0;background:var(--apg-bg-page);z-index:9999;padding-top:80px;">
+      <p><strong>JavaScript đang bị tắt.</strong></p>
+      <p>Price Scan cần JavaScript để render Dashboard và Job Detail. Hãy bật JS rồi tải lại trang.</p>
+    </div>
+  </noscript>
+
+  <script src="/static/app.js" defer></script>
+</body>
 </html>

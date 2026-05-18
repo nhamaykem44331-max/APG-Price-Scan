@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>APG Price Scan · Operations Terminal</title>
+  <link rel="stylesheet" href="styles.css">
+
+  <template id="__bundler_thumbnail">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+      <rect width="200" height="200" fill="#f4f3ef"/>
+      <rect x="20" y="30" width="160" height="140" rx="14" fill="#143b5f"/>
+      <g transform="translate(100 100) rotate(-25)" fill="#c8a85a">
+        <path d="M-40 -4 L 30 -4 L 40 0 L 30 4 L -40 4 Z"/>
+        <path d="M-20 -18 L -28 -18 L -8 -4 Z"/>
+        <path d="M-20 18 L -28 18 L -8 4 Z"/>
+        <path d="M28 -10 L 36 -2 L 36 2 L 28 10 Z"/>
+      </g>
+      <text x="100" y="190" text-anchor="middle" fill="#143b5f" font-family="Inter, sans-serif" font-size="12" font-weight="700" letter-spacing="2">PRICE SCAN</text>
+    </svg>
+  </template>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" src="mock-data.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="components.jsx"></script>
+  <script type="text/babel" src="dashboard.jsx"></script>
+  <script type="text/babel" src="job-detail.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>

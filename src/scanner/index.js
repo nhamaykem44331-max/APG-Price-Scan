@@ -12,6 +12,12 @@ const {
   sendZaloReport,
 } = require('./zalo');
 const logger = require('../logger');
+const {
+  buildActivity,
+  buildHistory,
+  enrichJob,
+  extendedScannerStats,
+} = require('./job-stats');
 
 const DEFAULT_RETENTION_DAYS = Number.parseFloat(process.env.SCAN_HISTORY_RETENTION_DAYS || '3');
 const MIN_INTERVAL_MINUTES = Number.parseInt(process.env.SCAN_MIN_INTERVAL_MINUTES || '5', 10);
@@ -411,12 +417,13 @@ function createScanner(options = {}) {
   }
 
   async function notifyIfNeeded(job, run) {
-    if (!shouldNotify(job, run)) return { attempted: false, status: 'skipped' };
+    if (!shouldNotify(job, run)) return { attempted: false, status: 'skipped', attempts: 0 };
     const channel = normalizeNotifyChannel(job.notify && job.notify.channel);
     try {
       const sent = channel === 'zalo'
         ? await sendZaloReport(job, run)
         : await sendScanReport(job, run);
+      const attempts = Number(sent && sent.attempts) || 1;
       store.recordNotification({
         jobId: job.id,
         runId: run.id,
@@ -425,6 +432,7 @@ function createScanner(options = {}) {
         createdAt: nowIso(),
         messageId: sent.messageId || (sent.messageIds || []).join(','),
         messageCount: sent.messageCount || 1,
+        attempts,
       });
       return {
         attempted: true,
@@ -432,9 +440,11 @@ function createScanner(options = {}) {
         status: 'sent',
         messageId: sent.messageId || (sent.messageIds || []).join(','),
         messageCount: sent.messageCount || 1,
+        attempts,
       };
     } catch (error) {
       const message = redactError(error);
+      const attempts = Number(error && error.attempts) || 1;
       store.recordNotification({
         jobId: job.id,
         runId: run.id,
@@ -442,8 +452,9 @@ function createScanner(options = {}) {
         status: 'failed',
         createdAt: nowIso(),
         error: message,
+        attempts,
       });
-      return { attempted: true, channel, status: 'failed', error: message };
+      return { attempted: true, channel, status: 'failed', error: message, attempts };
     }
   }
 
@@ -571,7 +582,7 @@ function createScanner(options = {}) {
     pruneTimer = null;
   }
 
-  function settings() {
+  function settings(options = {}) {
     const jobs = store.listJobs();
     const enabledJobs = jobs.filter((job) => job.enabled);
     const nextRunTimes = enabledJobs
@@ -586,7 +597,7 @@ function createScanner(options = {}) {
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
     const notificationFailures24h = lastNotification.filter((n) => n.status === 'failed' && Date.parse(n.createdAt || 0) >= cutoff).length;
 
-    return {
+    const base = {
       retentionDays,
       minIntervalMinutes: Number.isFinite(MIN_INTERVAL_MINUTES) && MIN_INTERVAL_MINUTES > 0 ? MIN_INTERVAL_MINUTES : 5,
       minIntervalSeconds: Number.isFinite(MIN_INTERVAL_SECONDS) && MIN_INTERVAL_SECONDS > 0 ? MIN_INTERVAL_SECONDS : 5,
@@ -612,6 +623,29 @@ function createScanner(options = {}) {
           }
         : null,
     };
+
+    if (!options.extended) return base;
+
+    // /health/extended fields — bigger query (all runs in retention window).
+    const allRuns = store.listRuns(null, { limit: 5000 });
+    const allNotifications = (typeof store.listNotifications === 'function')
+      ? store.listNotifications({ limit: 5000 })
+      : lastNotification;
+    const extended = extendedScannerStats(jobs, allRuns, allNotifications);
+    return { ...base, ...extended };
+  }
+
+  function getJobHistory(jobId, options = {}) {
+    const job = store.getJob(jobId);
+    if (!job) throw httpError(404, `Scan job not found: ${jobId}`);
+    const runs = store.listRuns(jobId, { limit: 5000 });
+    return buildHistory(job, runs, options);
+  }
+
+  function getActivity(options = {}) {
+    const jobs = store.listJobs();
+    const runs = store.listRuns(null, { limit: 1000 });
+    return buildActivity(jobs, runs, options);
   }
 
   function listNotifications(options) {
@@ -645,21 +679,33 @@ function createScanner(options = {}) {
       : sendTelegramTest(text);
   }
 
+  function enrichedJobs(jobs) {
+    const runs = store.listRuns(null, { limit: 5000 });
+    return jobs.map((job) => enrichJob(job, runs));
+  }
+
   return {
     buildScanReport,
-    createJob,
+    createJob: (input) => {
+      const created = createJob(input);
+      if (!created) return created;
+      return enrichJob(created, store.listRuns(created.id, { limit: 500 }));
+    },
     deleteJob,
     getJob: (id) => {
       const job = store.getJob(id);
       if (!job) throw httpError(404, `Scan job not found: ${id}`);
-      return job;
+      const runs = store.listRuns(id, { limit: 500 });
+      return enrichJob(job, runs);
     },
     getRun: (id) => {
       const run = store.getRun(id);
       if (!run) throw httpError(404, `Scan run not found: ${id}`);
       return run;
     },
-    listJobs: () => store.listJobs(),
+    getJobHistory,
+    getActivity,
+    listJobs: () => enrichedJobs(store.listJobs()),
     listRuns: (jobId, options) => store.listRuns(jobId, options),
     listNotifications,
     runJob,
@@ -669,7 +715,12 @@ function createScanner(options = {}) {
     settings,
     start,
     stop,
-    updateJob,
+    updateJob: (id, input) => {
+      const saved = updateJob(id, input);
+      if (!saved) return saved;
+      const runs = store.listRuns(id, { limit: 500 });
+      return enrichJob(saved, runs);
+    },
   };
 }
 

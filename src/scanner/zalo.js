@@ -101,6 +101,7 @@ async function postWebhook(payload) {
         ok: true,
         status: response.status,
         data: response.data,
+        attempts: attempt,
       };
     }
 
@@ -127,12 +128,14 @@ async function sendZaloReport(job, run) {
   const list = Array.isArray(messages) ? messages : [messages];
   let lastResult = null;
   const messageIds = [];
+  let totalAttempts = 0;
 
   for (const [index, text] of list.entries()) {
     if (!text) continue;
     const payload = buildZaloWebhookPayload(job, run, text, index + 1, list.length);
     lastResult = await postWebhook(payload);
     messageIds.push(lastResult.status);
+    totalAttempts += Number(lastResult && lastResult.attempts) || 1;
   }
 
   return {
@@ -140,6 +143,7 @@ async function sendZaloReport(job, run) {
     messageCount: list.length,
     messageIds,
     lastResult,
+    attempts: totalAttempts || 1,
   };
 }
 
