@@ -26,6 +26,7 @@
   };
 
   const REFRESH_MS = 30000;
+  const LOGIN_KEY = '8888';
 
   // ─── Tiny helpers ─────────────────────────────────
   const $ = (id) => document.getElementById(id);
@@ -109,7 +110,7 @@
       const data = text ? safeJson(text) : {};
       if (!response.ok) {
         if (response.status === 401) {
-          throw new Error('API key chưa đúng. Bấm 🔑 trên topbar để nhập.');
+          throw new Error('Khóa đăng nhập chưa đúng. Bấm nút chìa khóa trên topbar để nhập lại.');
         }
         throw new Error((data && data.error) || `HTTP ${response.status}`);
       }
@@ -352,16 +353,33 @@
     else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) applyTheme('dark');
   }
 
-  // ─── API key dialog (simple prompt fallback) ─────
-  function openApiKeyDialog() {
-    const cur = apiKey();
-    const next = window.prompt(
-      'Nhập BACKEND_API_KEY (lưu trong localStorage). Để trống → xóa key đã lưu.',
-      cur
-    );
+  // ─── Login key dialog (simple prompt fallback) ───
+  async function openApiKeyDialog() {
+    const next = window.prompt('Nhập khóa đăng nhập');
     if (next === null) return; // cancel
-    setApiKey(next.trim());
-    toast(next.trim() ? 'Đã lưu API key' : 'Đã xóa API key', 'success');
+
+    const loginKey = next.trim();
+    if (!loginKey) {
+      toast('Vui lòng nhập khóa đăng nhập.', 'error');
+      return;
+    }
+    if (loginKey !== LOGIN_KEY) {
+      toast('Khóa đăng nhập không đúng.', 'error');
+      return;
+    }
+
+    setApiKey(loginKey);
+    try {
+      await fetch('/admin/login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginKey }),
+      });
+    } catch (_) {
+      // The saved login key still covers local/internal deployments that accept it on API calls.
+    }
+    toast('Đã đăng nhập.', 'success');
     refreshAll();
   }
 
@@ -1412,11 +1430,10 @@
         </div>
       </div>
       <div class="panel">
-        <div class="panel-head"><h3>API key</h3></div>
+        <div class="panel-head"><h3>Khóa đăng nhập</h3></div>
         <div class="settings-section">
-          <p class="muted" style="margin-top:0">API key được lưu trong <code>localStorage.priceScanApiKey</code>. Bấm 🔑 trên topbar để đổi.</p>
-          <p class="muted">Nếu backend chạy <code>BACKEND_ALLOW_NO_AUTH=true</code>, có thể bỏ trống.</p>
-          <p>Hiện tại: <span class="mono">${apiKey() ? '••••••• (đã lưu)' : '(chưa lưu)'}</span></p>
+          <p class="muted" style="margin-top:0">Bấm nút chìa khóa trên topbar để nhập khóa đăng nhập.</p>
+          <p>Hiện tại: <span class="mono">${apiKey() ? '•••• (đã đăng nhập)' : '(chưa đăng nhập)'}</span></p>
         </div>
       </div>
     `;

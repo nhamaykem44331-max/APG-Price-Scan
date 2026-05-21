@@ -3130,12 +3130,12 @@ function adminSessionStatus(req) {
 
 function handleAdminLogin(body = {}) {
   const username = String(body.username || '').trim();
-  const password = String(body.password || '');
+  const password = String(body.password || body.loginKey || body.key || '');
   if (
-    !timingSafeStringEqual(username, ADMIN_USERNAME) ||
+    (username && !timingSafeStringEqual(username, ADMIN_USERNAME)) ||
     !timingSafeStringEqual(password, ADMIN_PASSWORD)
   ) {
-    throw new HttpError(401, 'Invalid username or password.');
+    throw new HttpError(401, 'Invalid login key.');
   }
   const sessionValue = createAdminSessionValue(ADMIN_USERNAME);
   const ttlSeconds = Number.isFinite(ADMIN_SESSION_TTL_SECONDS) && ADMIN_SESSION_TTL_SECONDS > 0
