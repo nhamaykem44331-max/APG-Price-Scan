@@ -26,7 +26,8 @@
   };
 
   const REFRESH_MS = 30000;
-  const LOGIN_KEY = '8888';
+  // NOTE: login key is verified by the backend (POST /admin/login). Client
+  // no longer stores or compares the key — that was a security smell.
 
   // ─── Tiny helpers ─────────────────────────────────
   const $ = (id) => document.getElementById(id);
@@ -324,15 +325,22 @@
   }
 
   // ─── Toast ────────────────────────────────────────
-  const TOAST_DURATIONS = { error: 6000, success: 2200, info: 3600 };
+  // Errors stay until user dismisses; success/info auto-fade.
+  const TOAST_DURATIONS = { error: 0, success: 2400, info: 3600 };
   function toast(message, type = 'info') {
     const el = $('toast');
     if (!el) return;
-    el.textContent = message;
     el.className = `toast toast-${type}`;
     el.hidden = false;
+    el.innerHTML = `<span class="toast-msg"></span><button type="button" class="toast-close" aria-label="Đóng">&times;</button>`;
+    el.querySelector('.toast-msg').textContent = message;
+    const closeBtn = el.querySelector('.toast-close');
+    closeBtn.addEventListener('click', () => { el.hidden = true; clearTimeout(el._timer); });
     clearTimeout(el._timer);
-    el._timer = setTimeout(() => { el.hidden = true; }, TOAST_DURATIONS[type] || TOAST_DURATIONS.info);
+    const dur = TOAST_DURATIONS[type];
+    if (dur > 0) {
+      el._timer = setTimeout(() => { el.hidden = true; }, dur);
+    }
   }
 
   // ─── Theme ────────────────────────────────────────
@@ -353,34 +361,82 @@
     else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) applyTheme('dark');
   }
 
-  // ─── Login key dialog (simple prompt fallback) ───
-  async function openApiKeyDialog() {
-    const next = window.prompt('Nhập khóa đăng nhập');
-    if (next === null) return; // cancel
+  // ─── Login key dialog (proper modal with password input) ─
+  function openApiKeyDialog() {
+    injectModalCss();
+    const existing = document.querySelector('.modal-overlay[data-modal="apiKey"]');
+    if (existing) { existing.querySelector('input')?.focus(); return; }
 
-    const loginKey = next.trim();
-    if (!loginKey) {
-      toast('Vui lòng nhập khóa đăng nhập.', 'error');
-      return;
-    }
-    if (loginKey !== LOGIN_KEY) {
-      toast('Khóa đăng nhập không đúng.', 'error');
-      return;
-    }
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.dataset.modal = 'apiKey';
+    overlay.innerHTML = `
+      <div class="modal-card panel" role="dialog" aria-modal="true" aria-labelledby="apiKeyTitle">
+        <div class="panel-head">
+          <h3 id="apiKeyTitle">Đăng nhập Price Scan</h3>
+          <button class="icon-btn" type="button" data-modal-close aria-label="Đóng">${icon('x', 16)}</button>
+        </div>
+        <form class="settings-section" id="apiKeyForm" style="display:flex;flex-direction:column;gap:14px">
+          <p class="muted" style="margin:0;font-size:13px">
+            Nhập khóa đăng nhập do quản trị viên cung cấp. Khóa sẽ được lưu trong trình duyệt
+            cho lần truy cập sau.
+          </p>
+          <div class="field-row">
+            <label for="apiKeyInput">Khóa đăng nhập</label>
+            <input id="apiKeyInput" type="password" autocomplete="current-password"
+                   inputmode="text" required minlength="1" placeholder="••••" autofocus>
+          </div>
+          <div id="apiKeyError" class="muted" style="color:var(--apg-danger);font-size:12px;min-height:14px"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button type="button" class="btn" data-modal-close>Hủy</button>
+            <button type="submit" class="btn btn-primary" id="apiKeySubmit">${icon('check', 14)} Đăng nhập</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(overlay);
 
-    setApiKey(loginKey);
-    try {
-      await fetch('/admin/login', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ loginKey }),
-      });
-    } catch (_) {
-      // The saved login key still covers local/internal deployments that accept it on API calls.
-    }
-    toast('Đã đăng nhập.', 'success');
-    refreshAll();
+    function close() { overlay.remove(); document.removeEventListener('keydown', escClose); }
+    function escClose(e) { if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', escClose);
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelectorAll('[data-modal-close]').forEach((el) => el.addEventListener('click', close));
+
+    const form = overlay.querySelector('#apiKeyForm');
+    const input = overlay.querySelector('#apiKeyInput');
+    const errEl = overlay.querySelector('#apiKeyError');
+    const submit = overlay.querySelector('#apiKeySubmit');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const loginKey = (input.value || '').trim();
+      if (!loginKey) { errEl.textContent = 'Vui lòng nhập khóa đăng nhập.'; return; }
+      submit.disabled = true;
+      errEl.textContent = '';
+      try {
+        const res = await fetch('/admin/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ loginKey }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error((data && data.error) || `Đăng nhập thất bại (HTTP ${res.status})`);
+        }
+        setApiKey(loginKey);
+        toast('Đã đăng nhập.', 'success');
+        close();
+        refreshAll();
+      } catch (err) {
+        errEl.textContent = err.message || 'Khóa đăng nhập không đúng.';
+        submit.disabled = false;
+        input.select();
+      }
+    });
+
+    input.focus();
   }
 
   // ─── Routing ──────────────────────────────────────
@@ -529,11 +585,16 @@
   function updateNavCounts() {
     const cnt = $('navJobCount');
     if (cnt) cnt.textContent = state.jobs.length;
+    const failed = state.notifications.filter((n) => n.status === 'failed').length;
     const notif = $('navNotifyCount');
     if (notif) {
-      const failed = state.notifications.filter((n) => n.status === 'failed').length;
       if (failed > 0) { notif.textContent = String(failed); notif.hidden = false; }
       else { notif.hidden = true; }
+    }
+    const mobileNotif = $('mobileNotifyBadge');
+    if (mobileNotif) {
+      if (failed > 0) { mobileNotif.textContent = failed > 9 ? '9+' : String(failed); mobileNotif.hidden = false; }
+      else { mobileNotif.hidden = true; }
     }
   }
 
@@ -594,9 +655,13 @@
           <h1>Tổng quan quét giá</h1>
         </div>
         <div class="page-actions">
-          <button class="btn btn-ghost btn-sm" type="button" id="autoRefreshChip">${icon('refresh', 14)} <span>Auto-refresh 30s</span></button>
-          <button class="btn btn-sm" type="button" id="testNotifyBtn">${icon('bell', 14)} Test notify</button>
-          <button class="btn btn-primary" type="button" id="newJobBtn">${icon('plus', 14)} Job mới</button>
+          <span class="auto-refresh-chip" title="Auto-refresh mỗi 30 giây">
+            <span class="ar-dot" aria-hidden="true"></span>
+            <span class="ar-label">Auto · 30s</span>
+          </span>
+          <button class="btn btn-ghost btn-sm icon-only-mobile" type="button" id="refreshNowBtn" aria-label="Refresh ngay">${icon('refresh', 14)} <span class="hide-mobile">Refresh</span></button>
+          <button class="btn btn-sm" type="button" id="testNotifyBtn">${icon('bell', 14)} <span class="hide-mobile">Test notify</span></button>
+          <button class="btn btn-primary" type="button" id="newJobBtn">${icon('plus', 14)} <span>Job mới</span></button>
         </div>
       </div>
 
@@ -741,8 +806,8 @@
     if (newJob) newJob.addEventListener('click', openCreateJobModal);
     const testNotify = $('testNotifyBtn');
     if (testNotify) testNotify.addEventListener('click', testNotify_handler);
-    const autoChip = $('autoRefreshChip');
-    if (autoChip) autoChip.addEventListener('click', refreshAll);
+    const refreshNow = $('refreshNowBtn');
+    if (refreshNow) refreshNow.addEventListener('click', refreshAll);
   }
 
   // ─── Job Detail view ──────────────────────────────
@@ -788,9 +853,8 @@
           <h1>${escapeHtml(job.name || jobId)}</h1>
         </div>
         <div class="page-actions">
-          <button class="btn btn-sm" type="button" id="runNowBtn">${icon('play', 12)} Run now</button>
-          <button class="btn btn-ghost btn-sm" type="button" id="testNotifyDetailBtn" title="Test notify">${icon('bell', 14)}</button>
-          <button class="btn btn-ghost btn-sm" type="button" id="deleteJobBtn" style="color:var(--apg-danger)" title="Xóa job">${icon('trash', 14)}</button>
+          <button class="btn btn-primary btn-sm" type="button" id="runNowBtn">${icon('play', 12)} Run now</button>
+          <button class="btn btn-ghost btn-sm" type="button" id="testNotifyDetailBtn" title="Test notify">${icon('bell', 14)} <span class="desktop-only">Test</span></button>
         </div>
       </div>
 
@@ -961,6 +1025,12 @@
               </div>
               <div class="switch ${q.directOnly ? 'on' : ''}" id="directSwitch" role="switch" aria-checked="${!!q.directOnly}" tabindex="0"></div>
             </div>
+          </div>
+
+          <div class="settings-section danger-zone">
+            <h4 style="color:var(--apg-danger)">Khu vực nguy hiểm</h4>
+            <p class="muted" style="margin:0;font-size:12px">Xóa job sẽ xóa luôn lịch sử quét và không thể khôi phục.</p>
+            <button type="button" class="btn btn-danger btn-sm" id="deleteJobBtn" style="align-self:flex-start">${icon('trash', 14)} Xóa job vĩnh viễn</button>
           </div>
         </div>
       </div>
@@ -1309,12 +1379,21 @@
         padding: 24px;
       }
       .modal-card {
-        width: 100%; max-width: 520px;
+        width: min(520px, calc(100vw - 32px));
+        max-width: 520px;
         max-height: calc(100vh - 48px); overflow: auto;
         background: var(--apg-bg-surface);
         box-shadow: var(--apg-shadow-lg);
       }
       .modal-card .panel-head h3 { text-transform: none; letter-spacing: 0; font-size: 16px; }
+      .modal-card .field-row-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+      .modal-card input, .modal-card select { width: 100%; min-width: 0; box-sizing: border-box; }
+      .modal-card form { min-width: 0; }
+      @media (max-width: 560px) {
+        .modal-overlay { padding: 12px; align-items: flex-start; }
+        .modal-card { width: 100%; max-width: 100%; max-height: calc(100vh - 24px); }
+        .modal-card .field-row-2 { grid-template-columns: 1fr; }
+      }
     `;
     document.head.appendChild(style);
   }

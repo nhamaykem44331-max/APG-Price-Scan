@@ -47,4 +47,8 @@ venv/
 
 # Local backups + archives (không commit)
 public.old/
+public.bak-*/
 *.zip
+
+# UX fix transfer package (nguồn patch tạm, đã áp vào public/)
+Price scan UX Fix/
