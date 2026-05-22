@@ -78,8 +78,9 @@ module.exports = {
     // Độ dài chính xác là 3 (maxlength="3" trên input)
     expectedLength: { min: 3, max: 3 },
 
-    // Retry nhiều hơn vì captcha canvas có thể khó OCR
-    maxRetry: 10,
+    // Giới hạn TỔNG số lần giải captcha OCR mỗi lần đăng nhập (chống spam/khoá tài khoản).
+    // Mặc định 3: thử tối đa 3 lần, vẫn sai thì DỪNG và bắn Zalo cảnh báo.
+    maxRetry: Number.parseInt(process.env.LOGIN_MAX_ATTEMPTS || '3', 10),
 
     useBeta: true,
   },

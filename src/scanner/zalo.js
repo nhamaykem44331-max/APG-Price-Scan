@@ -236,12 +236,46 @@ async function sendReservationAlert(reservation, scan) {
   };
 }
 
+// Cảnh báo đăng nhập THẤT BẠI sau N lần giải captcha OCR (chống spam/khoá tài khoản).
+async function sendLoginFailureAlert(account, error, attempts) {
+  const cfg = zaloConfig();
+  const username = (account && account.username) || process.env.NAMTHANH_USERNAME || 'tài khoản chính';
+  const reason = String((error && error.message) || error || 'không rõ').slice(0, 300);
+  const lines = [
+    '🔴 APG SCAN — ĐĂNG NHẬP THẤT BẠI',
+    `Tài khoản: ${username}`,
+    `Đã thử ${attempts || '?'} lần giải captcha OCR nhưng vẫn sai → ĐÃ TẠM DỪNG để tránh khoá tài khoản.`,
+    `Lý do: ${reason}`,
+    'Vui lòng kiểm tra: OCR server, captcha, hoặc mật khẩu đăng nhập.',
+  ];
+  const content = lines.join('\n');
+  const payload = {
+    event: 'price_scan.login_failed',
+    channel: 'zalo',
+    content,
+    summaryText: content,
+    messageIndex: 1,
+    messageCount: 1,
+    zaloTargetId: cfg.targetId,
+    zaloThreadType: cfg.threadType,
+    login: {
+      account: (account && account.id) || 'primary',
+      username,
+      attempts: attempts || null,
+      error: reason,
+    },
+  };
+  const result = await postWebhook(payload);
+  return { ok: true, messageIds: [result.status], attempts: result.attempts || 1, lastResult: result };
+}
+
 module.exports = {
   buildZaloWebhookPayload,
   isZaloConfigured,
   postWebhook,
   sendZaloMessage,
   sendReservationAlert,
+  sendLoginFailureAlert,
   sendZaloReport,
   zaloConfig,
 };

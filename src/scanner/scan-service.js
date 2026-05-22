@@ -1,6 +1,7 @@
 const { runLogin } = require('../session-login');
 const config = require('../config');
 const { MuadiApiClient, MuadiApiError } = require('../muadi-client');
+const { isZaloConfigured, sendLoginFailureAlert } = require('./zalo');
 const {
   cheapestFare,
   departTimeOf,
@@ -12,6 +13,32 @@ const logger = require('../logger');
 
 // Dedup login đang chạy, theo từng tài khoản (key = account.id), để hỗ trợ quét nhiều tài khoản.
 const loginInflight = new Map();
+
+// Dedup cảnh báo "đăng nhập thất bại" theo tài khoản: chỉ bắn Zalo 1 lần cho tới khi login lại được.
+const loginFailureAlerted = new Set();
+
+function accountKey(account) {
+  return account ? account.id : 'primary';
+}
+
+// Bắn Zalo cảnh báo login thất bại — CHỈ 1 lần/tài khoản (reset khi login thành công) để tránh spam mỗi cycle.
+async function notifyLoginFailureOnce(account, error) {
+  const key = accountKey(account);
+  if (loginFailureAlerted.has(key)) return false;
+  loginFailureAlerted.add(key);
+  if (isZaloConfigured()) {
+    try {
+      await sendLoginFailureAlert(account, error, config.captcha && config.captcha.maxRetry);
+    } catch (e) {
+      logger.error('[scanner] không gửi được Zalo cảnh báo login thất bại:', e && e.message);
+    }
+  }
+  return true;
+}
+
+function resetLoginFailureAlert(account) {
+  loginFailureAlerted.delete(accountKey(account));
+}
 
 function primaryAccount() {
   return (config.accounts && config.accounts[0]) || null;
@@ -87,12 +114,22 @@ function shouldRetryWithLogin(error) {
 }
 
 async function runLoginOnce(account) {
-  const key = account ? account.id : 'primary';
+  const key = accountKey(account);
   if (!loginInflight.has(key)) {
     logger.warn(`[scanner] Triggering Playwright login (${account ? account.username : 'primary'}) during scan — may add up to 30s latency for this tick.`);
-    const inflight = runLogin({ headless: true, account: account || undefined }).finally(() => {
-      loginInflight.delete(key);
-    });
+    const inflight = runLogin({ headless: true, account: account || undefined })
+      .then((result) => {
+        resetLoginFailureAlert(account); // login lại được → cho phép cảnh báo lần sau nếu lại lỗi
+        return result;
+      })
+      .catch(async (err) => {
+        // Đã thử tối đa LOGIN_MAX_ATTEMPTS lần OCR vẫn sai → dừng + bắn Zalo (1 lần) tránh khoá tài khoản.
+        await notifyLoginFailureOnce(account, err);
+        throw err;
+      })
+      .finally(() => {
+        loginInflight.delete(key);
+      });
     loginInflight.set(key, inflight);
   }
   return loginInflight.get(key);
@@ -256,4 +293,6 @@ module.exports = {
   timeInWindow,
   withScannerAutoLogin,
   withAccountAutoLogin,
+  notifyLoginFailureOnce,
+  resetLoginFailureAlert,
 };
