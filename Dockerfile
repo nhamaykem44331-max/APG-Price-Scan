@@ -22,4 +22,5 @@ RUN mkdir -p /app/storage/session /app/storage/data /app/storage/screenshots
 
 EXPOSE 10000
 
-CMD ["sh", "-c", "python3 ocr_server.py 8001 & npm run api"]
+# OCR chạy dưới supervisor (tự restart nếu crash) + chờ OCR sẵn sàng rồi mới start backend.
+CMD ["sh", "/app/scripts/docker-start.sh"]
