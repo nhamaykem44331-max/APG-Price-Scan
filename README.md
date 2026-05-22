@@ -338,6 +338,33 @@ Webhook nhận các field chính từ backend:
 
 Trên UI, dùng switch `Notify platform` để chọn `Telegram` hoặc `Zalo` cho từng job. Nút `Test Notify` sẽ gửi test theo nền tảng đang chọn.
 
+## Canh Giá Chỗ Giữ (Reservation Watch)
+
+Cơ chế tự động canh giá cho **các chỗ đang giữ** trên `booking.namthanh.vn/booking/reservation-status`:
+
+- Mỗi `RESERVATION_WATCH_INTERVAL_MINUTES` (mặc định **30 phút**), backend gọi `management/list-booking` (API đứng sau trang reservation-status) để lấy danh sách giữ chỗ. Body phải **mã hoá** kèm filter `{fromDate,toDate,serviceType:"Flights",...}` (xem `MuadiApiClient.listBooking`; dùng cửa sổ lookback 7 ngày để bắt cả chỗ giữ từ vài ngày trước).
+- Với mỗi chỗ giữ, hệ thống **re-scan đúng chuyến đang giữ** — list-booking không trả số hiệu chuyến nên match bằng **hãng + route + giờ cất cánh** (từ `depDay`) qua `searchJourney` + `selectFlight` + `cheapestFare`.
+- Nếu **giá hiện tại < giá đang giữ** → gửi **Zalo** ngay (kèm giá giữ → giá mới, chênh lệch, số chỗ còn).
+- Chống spam: chỉ báo **1 lần khi mới rớt**; chỉ re-alert nếu giá **rớt sâu hơn** mức đã báo.
+- **Chỉ auto-canh chỗ còn "Thời gian giữ chỗ" thật trong tương lai** (`hasHoldTime`). Chỗ **không có thời gian giữ chỗ** (timelimit placeholder `01-01-1990`) hoặc **đã qua hạn** = coi như **hết hạn** → **tự động dừng canh**, vẫn hiển thị trong bảng kèm nút **"Kích hoạt"** (`POST /reservation-watch/override {pnr,on}`) để canh tiếp nếu vẫn muốn. Chuyến **đã bay** thì bỏ hẳn.
+- Bảng "Canh giá chỗ giữ" mirror trang reservation-status (Hãng/PNR/Hành trình/Khách hàng/Giá giữ/Giá hiện tại/Thời gian giữ chỗ/Ngày đặt/Trạng thái/Người dùng) + cột **Giá hiện tại** (chênh lệch + số ghế) và cột **Canh giá** (Đang canh / Kích hoạt).
+- Quét **lần lượt nhiều tài khoản** (`config.accounts`: chính + `NAMTHANH_USERNAME_2…`) để gom hết PNR; gộp theo PNR, 1 tài khoản lỗi không làm hỏng cả cycle.
+- Round-trip tạm bỏ qua (MVP one-way).
+- ⚠️ list-booking **không trả số khách** → mặc định 1 khách. Có guard chặn "rớt giá" bất thường (currentTotal < 60% giá giữ) để tránh báo sai với booking nhiều khách.
+
+Cấu hình (env hoặc Settings UI):
+
+```env
+RESERVATION_WATCH_ENABLED=true
+RESERVATION_WATCH_INTERVAL_MINUTES=30
+RESERVATION_WATCH_SCOPE=held    # 'held' = chỉ chỗ chưa xuất vé + còn hạn; 'all' = mọi booking
+RESERVATION_WATCH_MIN_DROP=0    # ngưỡng chênh tối thiểu (VND); 0 = mọi mức rẻ hơn
+```
+
+Trên UI: vào **Settings → Canh giá chỗ giữ** để bật/tắt, chọn phạm vi (held/all), chu kỳ, ngưỡng, và bấm **Quét ngay** để chạy thử. Bảng bên dưới liệt kê chỗ giữ + so giá gần nhất.
+
+> ⚠️ Yêu cầu session Muadi còn sống (cần `npm run ocr` + `npm run login`). Field-mapping của `management/list-booking` đã verify bằng response thật (`pnrCode, airlines, depCity/retCity, depDay/retDay, timelimit, bookingStatusNote, bookingStatus, totalPrice` — xem `src/scanner/reservation-parser.js`). Để re-capture/giải mã lại request body khi API đổi, chạy `node scripts/dev/capture-listbooking.js`.
+
 ## Lưu Lịch Sử
 
 Store local:
@@ -378,6 +405,10 @@ GET    /scan-notifications?limit=50&status=sent|failed&jobId=...  # Audit notifi
 POST   /notifications/test              # Send test message by channel: telegram|zalo
 POST   /notifications/telegram/test     # Send test Telegram message
 POST   /notifications/zalo/test         # Send test Zalo message through n8n webhook
+GET    /reservations                    # Danh sách chỗ giữ đang theo dõi + so giá gần nhất
+GET    /reservation-watch/status        # Trạng thái watcher (enabled, scope, lastRunAt, ...)
+POST   /reservation-watch/run-now       # Chạy 1 chu kỳ canh giá ngay
+PATCH  /reservation-watch/settings      # Cập nhật enabled/scope/intervalMinutes/minDropAmount
 ```
 
 `/health.scanner` trả về thêm `jobCount`, `enabledJobCount`, `nextScheduledRun`, `recentFailures`, `notificationFailures24h`, `lastRun` để monitor không cần gọi thêm endpoint.

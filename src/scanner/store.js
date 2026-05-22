@@ -18,6 +18,18 @@ function randomId(prefix) {
   return `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
 }
 
+function defaultReservationSettings() {
+  return {
+    enabled: String(process.env.RESERVATION_WATCH_ENABLED || 'true').toLowerCase() !== 'false',
+    scope: ['held', 'all'].includes(String(process.env.RESERVATION_WATCH_SCOPE || '').toLowerCase())
+      ? String(process.env.RESERVATION_WATCH_SCOPE).toLowerCase()
+      : 'held',
+    intervalMinutes: Number.parseInt(process.env.RESERVATION_WATCH_INTERVAL_MINUTES || '30', 10) || 30,
+    minDropAmount: Number.parseInt(process.env.RESERVATION_WATCH_MIN_DROP || '0', 10) || 0,
+    channel: 'zalo',
+  };
+}
+
 function defaultData() {
   return {
     version: 1,
@@ -26,6 +38,8 @@ function defaultData() {
     jobs: [],
     runs: [],
     notifications: [],
+    reservations: [],
+    reservationSettings: defaultReservationSettings(),
   };
 }
 
@@ -49,6 +63,8 @@ class ScanStore {
       jobs: Array.isArray(data.jobs) ? data.jobs : [],
       runs: Array.isArray(data.runs) ? data.runs : [],
       notifications: Array.isArray(data.notifications) ? data.notifications : [],
+      reservations: Array.isArray(data.reservations) ? data.reservations : [],
+      reservationSettings: { ...defaultReservationSettings(), ...(data.reservationSettings || {}) },
     };
   }
 
@@ -175,6 +191,60 @@ class ScanStore {
         removedRuns: beforeRuns - data.runs.length,
         removedNotifications: beforeNotifications - data.notifications.length,
       };
+    });
+  }
+
+  // ─── Reservation watcher state ─────────────────────
+  getReservationSettings() {
+    return clone(this.load().reservationSettings || {});
+  }
+
+  setReservationSettings(patch = {}) {
+    return this.mutate((data) => {
+      data.reservationSettings = { ...(data.reservationSettings || {}), ...patch };
+      return data.reservationSettings;
+    });
+  }
+
+  listReservations() {
+    return clone(
+      (this.load().reservations || [])
+        .slice()
+        .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
+    );
+  }
+
+  getReservation(pnr) {
+    const key = String(pnr || '').toUpperCase();
+    const found = (this.load().reservations || []).find((r) => String(r.pnr || '').toUpperCase() === key);
+    return clone(found || null);
+  }
+
+  // Upsert một reservation theo pnr; trả về bản đã lưu.
+  upsertReservation(pnr, patch = {}) {
+    const key = String(pnr || '').toUpperCase();
+    if (!key) return null;
+    return this.mutate((data) => {
+      if (!Array.isArray(data.reservations)) data.reservations = [];
+      const idx = data.reservations.findIndex((r) => String(r.pnr || '').toUpperCase() === key);
+      const now = nowIso();
+      if (idx < 0) {
+        const created = { pnr: key, createdAt: now, updatedAt: now, ...patch };
+        data.reservations.push(created);
+        return created;
+      }
+      data.reservations[idx] = { ...data.reservations[idx], ...patch, pnr: key, updatedAt: now };
+      return data.reservations[idx];
+    });
+  }
+
+  // Bỏ các reservation không còn trong list hiện tại (đã xuất vé/huỷ/hết hạn).
+  pruneReservationsNotIn(activePnrs = []) {
+    const keep = new Set(activePnrs.map((p) => String(p || '').toUpperCase()));
+    return this.mutate((data) => {
+      const before = (data.reservations || []).length;
+      data.reservations = (data.reservations || []).filter((r) => keep.has(String(r.pnr || '').toUpperCase()));
+      return { removed: before - data.reservations.length };
     });
   }
 }

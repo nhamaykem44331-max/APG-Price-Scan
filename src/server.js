@@ -17,6 +17,7 @@ const {
 } = require('./muadi-client');
 const { handleLowestFareRequest } = require('./routes/lowest-fare');
 const { createScanner } = require('./scanner');
+const { createReservationWatcher } = require('./scanner/reservation-watcher');
 const ocrClient = require('./ddddocr-client');
 const {
   buildAncillariesRequest,
@@ -98,6 +99,7 @@ let exchangeRateInflight = null;
 const AIRPORTS_JSON_PATH = path.join(__dirname, '../data/airports.json');
 const PUBLIC_DIR = path.join(__dirname, '../public');
 const scanner = createScanner();
+const reservationWatcher = createReservationWatcher();
 
 function computePriceUSD(vnd) {
   const rate = (exchangeRateCache && exchangeRateCache.value) || EXCHANGE_RATE_FALLBACK;
@@ -1905,12 +1907,9 @@ function logAncillaryFailure(meta = {}) {
 }
 
 async function fetchListBookingRowsViaApi(client) {
-  const listing = await client.post('management/list-booking', undefined, {
-    encrypt: false,
-    version: null,
-    safeToRetry: true,
-    timeout: 20_000,
-  });
+  // management/list-booking yêu cầu body mã hoá kèm filter (fromDate/toDate/serviceType…);
+  // client.listBooking() đã chứa đúng filter + cửa sổ lookback (verify bằng capture thật).
+  const listing = await client.listBooking();
   return Array.isArray(listing && listing.data) ? listing.data : [];
 }
 
@@ -3240,6 +3239,42 @@ async function dispatch(req, res) {
     return;
   }
 
+  // ─── Reservation price-drop watcher ──────────────────────
+  if (req.method === 'GET' && pathname === '/reservations') {
+    sendJson(res, 200, { success: true, reservations: reservationWatcher.listReservations() });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/reservation-watch/status') {
+    sendJson(res, 200, { success: true, status: reservationWatcher.status() });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/reservation-watch/run-now') {
+    const result = await reservationWatcher.runCycle({ manual: true });
+    sendJson(res, 200, { success: true, result });
+    return;
+  }
+
+  if (req.method === 'PATCH' && pathname === '/reservation-watch/settings') {
+    const body = await readBody(req);
+    const saved = reservationWatcher.updateSettings(body || {});
+    sendJson(res, 200, { success: true, settings: saved, status: reservationWatcher.status() });
+    return;
+  }
+
+  // Bật/tắt theo dõi thủ công 1 PNR (nút "Kích hoạt" cho chỗ đã hết hạn giữ chỗ).
+  if (req.method === 'POST' && pathname === '/reservation-watch/override') {
+    const body = await readBody(req);
+    const pnr = body && body.pnr;
+    const on = !!(body && body.on);
+    if (!pnr) { sendJson(res, 400, { success: false, error: 'pnr is required' }); return; }
+    const updated = reservationWatcher.setReservationOverride(pnr, on);
+    if (!updated) { sendJson(res, 404, { success: false, error: `Reservation ${pnr} not found` }); return; }
+    sendJson(res, 200, { success: true, reservation: updated });
+    return;
+  }
+
   if (req.method === 'GET' && pathname === '/activity') {
     const limitParam = Number.parseInt(url.searchParams.get('limit') || '50', 10);
     if (!Number.isFinite(limitParam) || limitParam < 1 || limitParam > 200) {
@@ -3473,6 +3508,7 @@ async function shutdown(server, signal) {
   console.log(`[shutdown] ${signal} received — closing server...`);
   if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
   try { scanner.stop(); } catch (_) { /* ignore */ }
+  try { reservationWatcher.stop(); } catch (_) { /* ignore */ }
   try { await closeSingletonBrowser(); } catch (_) { /* ignore */ }
   server.close(() => {
     console.log('[shutdown] HTTP server closed');
@@ -3495,6 +3531,11 @@ if (require.main === module) {
     if (String(process.env.SCANNER_AUTO_START || 'true').toLowerCase() !== 'false') {
       scanner.start();
       console.log('[scanner] Started local scan scheduler');
+    }
+
+    if (reservationWatcher.settings().enabled) {
+      reservationWatcher.start();
+      console.log('[reservation-watch] Started reservation price-drop watcher');
     }
 
     // Kick off warm-up so the first real user request doesn't pay login cost.

@@ -11,6 +11,13 @@ function validateEnv() {
   }
 }
 
+function validateAccount(account) {
+  const missing = ['username', 'password', 'agencyCode'].filter((k) => !account[k]);
+  if (missing.length > 0) {
+    throw new Error(`Account ${account.id || account.username || '?'} thiếu: ${missing.join(', ')}`);
+  }
+}
+
 // Tái sử dụng 1 Chromium process giữa các lần login để tiết kiệm 1–2s/launch.
 // Đóng context (không đóng browser) sau mỗi lần để giải phóng RAM, nhưng process
 // Chromium vẫn sống tới khi backend tắt hoặc headless-mode đổi.
@@ -52,13 +59,18 @@ async function closeSingletonBrowser() {
 }
 
 async function runLogin(options = {}) {
-  validateEnv();
+  const account = options.account || null;
+  if (account) {
+    validateAccount(account);
+  } else {
+    validateEnv();
+  }
 
   const headless = options.headless !== undefined ? options.headless : true;
   const browser = await getBrowser(headless);
   let context;
   try {
-    const result = await login(browser);
+    const result = await login(browser, account);
     context = result && result.context;
     if (!result || !result.success) {
       throw new Error('Login did not complete successfully.');
@@ -73,8 +85,28 @@ async function runLogin(options = {}) {
   }
 }
 
+// Login lần lượt TẤT CẢ tài khoản cấu hình (config.accounts). Trả về [{account, ok, error}].
+async function runLoginAll(options = {}) {
+  const accounts = (config.accounts && config.accounts.length)
+    ? config.accounts
+    : [null]; // null = dùng credentials mặc định
+  const results = [];
+  for (const account of accounts) {
+    try {
+      await runLogin({ ...options, account });
+      results.push({ account: account ? account.id : 'primary', username: account && account.username, ok: true });
+    } catch (error) {
+      logger.error(`[session-login] Login thất bại cho ${account ? account.username : 'primary'}: ${error.message}`);
+      results.push({ account: account ? account.id : 'primary', username: account && account.username, ok: false, error: error.message });
+    }
+  }
+  return results;
+}
+
 module.exports = {
   runLogin,
+  runLoginAll,
   validateEnv,
+  validateAccount,
   closeSingletonBrowser,
 };

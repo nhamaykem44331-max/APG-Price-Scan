@@ -168,11 +168,80 @@ async function sendZaloMessage(text) {
   };
 }
 
+function money(value) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n.toLocaleString('vi-VN') : '0';
+}
+
+// Cảnh báo giá vé hiện tại rẻ hơn giá đang giữ chỗ.
+async function sendReservationAlert(reservation, scan) {
+  const cfg = zaloConfig();
+  const held = Number(reservation.heldPrice) || 0;
+  const now = Number(scan.currentTotal) || 0;
+  const delta = held - now;
+  const pct = held > 0 ? ((delta / held) * 100).toFixed(1) : '0';
+  const seats = (scan.seatAvailable === undefined || scan.seatAvailable === null) ? '-' : scan.seatAvailable;
+  const route = `${reservation.from}-${reservation.to}`;
+  const pax = `${reservation.adt || 1}NL${reservation.chd ? `+${reservation.chd}TE` : ''}${reservation.inf ? `+${reservation.inf}EB` : ''}`;
+
+  const lines = [
+    `🔻 GIÁ GIẢM dưới giá giữ chỗ`,
+    `PNR: ${reservation.pnr} · ${reservation.flightNumber} ${route} · ${reservation.date}`,
+    `Giá giữ: ${money(held)} ₫`,
+    `Giá hiện tại: ${money(now)} ₫ (${money(scan.perAdult)} ₫/khách × ${pax})`,
+    `Tiết kiệm: ${money(delta)} ₫ (-${pct}%)`,
+    `Số chỗ còn: ${seats}`,
+  ];
+  const content = lines.join('\n');
+
+  const payload = {
+    event: 'price_scan.reservation_drop',
+    channel: 'zalo',
+    content,
+    summaryText: content,
+    messageIndex: 1,
+    messageCount: 1,
+    zaloTargetId: cfg.targetId,
+    zaloThreadType: cfg.threadType,
+    reservation: {
+      pnr: reservation.pnr,
+      from: reservation.from,
+      to: reservation.to,
+      date: reservation.date,
+      flightNumber: reservation.flightNumber,
+      heldPrice: held,
+      adt: reservation.adt,
+      chd: reservation.chd,
+      inf: reservation.inf,
+      status: reservation.status,
+      timelimit: reservation.timelimit,
+    },
+    scan: {
+      currentTotal: now,
+      perAdult: scan.perAdult,
+      seatAvailable: scan.seatAvailable,
+      delta,
+      deltaPct: Number(pct),
+      currency: scan.currency || 'VND',
+    },
+  };
+
+  const result = await postWebhook(payload);
+  return {
+    ok: true,
+    messageCount: 1,
+    messageIds: [result.status],
+    attempts: result.attempts || 1,
+    lastResult: result,
+  };
+}
+
 module.exports = {
   buildZaloWebhookPayload,
   isZaloConfigured,
   postWebhook,
   sendZaloMessage,
+  sendReservationAlert,
   sendZaloReport,
   zaloConfig,
 };

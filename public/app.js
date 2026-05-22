@@ -15,6 +15,8 @@
     runs: {},             // by jobId: [run, ...]
     notifications: [],
     settings: null,
+    reservationWatch: null,   // reservation price-drop watcher status
+    reservations: [],         // held reservations being watched
     route: { view: 'dashboard', jobId: null },
     filter: 'all',        // routes board filter
     chartRange: '24h',    // job detail chart range
@@ -47,6 +49,8 @@
     return Number.isFinite(num) ? num.toLocaleString('vi-VN') : '0';
   }
 
+  const money = fmtVND;
+
   function pad2(v) { return String(v).padStart(2, '0'); }
 
   function fmtTime(value) {
@@ -64,6 +68,13 @@
     m = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
     if (m) return `${pad2(m[1])}/${pad2(m[2])}/${m[3]}`;
     return text;
+  }
+
+  function displayDate(value) {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return fmtDate(value);
+    return d.toLocaleString('vi-VN', { hour12: false });
   }
 
   function fmtRel(iso) {
@@ -538,6 +549,10 @@
       const data = await apiFetch('/scan-settings');
       state.settings = (data && data.settings) || null;
     } catch (_) { state.settings = null; }
+    await Promise.all([
+      apiFetch('/reservation-watch/status').then((d) => { state.reservationWatch = (d && d.status) || null; }).catch(() => { state.reservationWatch = null; }),
+      apiFetch('/reservations').then((d) => { state.reservations = (d && d.reservations) || []; }).catch(() => { state.reservations = []; }),
+    ]);
   }
 
   async function loadDataForRoute() {
@@ -1508,6 +1523,8 @@
           ${env.map(([k, v]) => `<div class="row"><div class="when">${escapeHtml(k)}</div><div style="grid-column:span 3"><span class="mono">${escapeHtml(v)}</span></div></div>`).join('')}
         </div>
       </div>
+      ${renderReservationWatchPanel()}
+
       <div class="panel">
         <div class="panel-head"><h3>Khóa đăng nhập</h3></div>
         <div class="settings-section">
@@ -1516,6 +1533,196 @@
         </div>
       </div>
     `;
+
+    bindReservationWatchEvents();
+  }
+
+  const AIRLINE_META = {
+    VN: { name: 'Vietnam Airlines', cls: 'air-vn' },
+    VJ: { name: 'Vietjet Air', cls: 'air-vj' },
+    QH: { name: 'Bamboo Airways', cls: 'air-qh' },
+    VU: { name: 'Vietravel Airlines', cls: 'air-vu' },
+    '9G': { name: 'Sun PhuQuoc Airways', cls: 'air-9g' },
+  };
+  function airlineChip(code) {
+    const c = String(code || '').toUpperCase();
+    const meta = AIRLINE_META[c] || { name: c || '—', cls: 'air-x' };
+    return `<span class="air-chip ${meta.cls}" title="${escapeHtml(meta.name)}">${escapeHtml(c || '—')}</span>`;
+  }
+  function statusBadgeClass(label) {
+    switch (label) {
+      case 'Giữ chỗ': return 'success';
+      case 'Chưa xác định': return 'warn';
+      case 'Đã thanh toán': return 'info';
+      case 'Quá hạn': return 'danger';
+      case 'Đã void/huỷ': return 'danger';
+      default: return '';
+    }
+  }
+
+  function renderReservationWatchPanel() {
+    const rw = state.reservationWatch || {};
+    const reservations = state.reservations || [];
+    const rows = reservations.map((r) => {
+      const held = Number(r.heldPrice) || 0;
+      const now = Number(r.lastSeenPrice);
+      const hasNow = Number.isFinite(now);
+      const active = r.active !== false;
+      const drop = hasNow ? held - now : null;
+      const dropClass = drop > 0 ? 'change-down' : drop < 0 ? 'change-up' : '';
+      const routeSub = [r.flightNumber, r.date, r.departTime].filter(Boolean).join(' · ');
+      const seats = (r.lastSeats !== undefined && r.lastSeats !== null) ? `${escapeHtml(String(r.lastSeats))} ghế` : '';
+      const pnr = escapeHtml(r.pnr || '');
+      let nowCell;
+      if (!active) {
+        nowCell = `<span class="muted">${hasNow ? `${money(now)} ₫` : '—'} <span class="sub">(đã dừng)</span></span>`;
+      } else if (hasNow) {
+        nowCell = `<span class="mono">${money(now)} ₫</span>${drop !== null && drop !== 0 ? ` <span class="change ${dropClass}">${drop > 0 ? '↓' : '↑'} ${money(Math.abs(drop))}</span>` : ''}${seats ? `<div class="muted sub">${seats}</div>` : ''}`;
+      } else {
+        nowCell = `<span class="muted">${r.scannable === false ? (r.note ? escapeHtml(r.note) : 'không quét') : 'chưa quét'}</span>`;
+      }
+      const watchCell = active
+        ? `<span class="badge success">Đang canh</span>${r.watchOverride ? `<div class="sub"><button type="button" class="btn btn-ghost btn-xs rw-override" data-pnr="${pnr}" data-on="0">Tắt canh</button></div>` : ''}`
+        : `<div class="muted sub">${escapeHtml(r.inactiveReason || 'Đã dừng')}</div><button type="button" class="btn btn-sm rw-override" data-pnr="${pnr}" data-on="1">Kích hoạt</button>`;
+      return `<tr class="${active ? '' : 'resv-inactive'}">
+        <td>${airlineChip(r.airline)}</td>
+        <td><span class="mono pnr">${escapeHtml(r.pnr || '—')}</span>${r.lastAlertAt ? '<div><span class="badge warn">đã báo</span></div>' : ''}</td>
+        <td><b>${escapeHtml((r.from || '') + ' → ' + (r.to || ''))}</b>${routeSub ? `<div class="muted sub">${escapeHtml(routeSub)}</div>` : ''}</td>
+        <td>${escapeHtml(r.customerName || '—')}</td>
+        <td class="num"><span class="mono">${money(held)} ₫</span></td>
+        <td class="num price-now">${nowCell}</td>
+        <td>${escapeHtml(r.timelimit || '—')}</td>
+        <td>${escapeHtml(r.bookingTime || '—')}</td>
+        <td><span class="badge ${statusBadgeClass(r.statusLabel)}">${escapeHtml(r.statusLabel || r.status || '—')}</span></td>
+        <td>${escapeHtml(r.username || '—')}</td>
+        <td class="watch-cell">${watchCell}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Canh giá chỗ giữ (Reservation watch)</h3>
+          <div class="panel-tools">
+            <span class="badge ${rw.enabled ? 'success' : ''}">${rw.enabled ? 'ON' : 'OFF'}</span>
+            ${rw.zaloConfigured ? '' : '<span class="badge danger">Zalo missing</span>'}
+            <button type="button" class="btn btn-sm" id="rwRunNow">${icon('refresh', 12)} Quét ngay</button>
+          </div>
+        </div>
+        <div class="settings-section">
+          <p class="muted" style="margin-top:0">Mỗi ${escapeHtml(String(rw.intervalMinutes || 30))} phút, hệ thống lấy danh sách giữ chỗ ở reservation-status, re-scan đúng chuyến đang giữ. Nếu giá hiện tại rẻ hơn giá giữ → gửi Zalo (1 lần, re-alert khi rớt sâu hơn). Chỗ <b>hết hạn giữ chỗ tự động dừng canh</b> — bấm <b>Kích hoạt</b> ở cột "Canh giá" nếu vẫn muốn canh tiếp.</p>
+          <div class="switch-row">
+            <div class="label-block"><span class="name">Bật canh giá</span><span class="desc">Tự động chạy nền mỗi ${escapeHtml(String(rw.intervalMinutes || 30))} phút</span></div>
+            <div class="switch ${rw.enabled ? 'on' : ''}" id="rwEnabled" role="switch" aria-checked="${!!rw.enabled}" tabindex="0"></div>
+          </div>
+          <div class="field-row">
+            <label>Phạm vi theo dõi</label>
+            <div class="seg">
+              <button type="button" data-rw-scope="held" class="${rw.scope !== 'all' ? 'active' : ''}">Chỉ chỗ chưa xuất vé</button>
+              <button type="button" data-rw-scope="all" class="${rw.scope === 'all' ? 'active' : ''}">Tất cả booking</button>
+            </div>
+          </div>
+          <div class="field-row-2">
+            <div class="field-row"><label>Chu kỳ (phút)</label><input type="number" min="5" id="rwInterval" value="${escapeHtml(String(rw.intervalMinutes || 30))}"></div>
+            <div class="field-row"><label>Ngưỡng chênh tối thiểu (₫)</label><input type="number" min="0" step="10000" id="rwMinDrop" value="${escapeHtml(String(rw.minDropAmount || 0))}"></div>
+          </div>
+          <div class="muted" style="font-size:11px">Lần quét gần nhất: ${rw.lastRunAt ? escapeHtml(displayDate(rw.lastRunAt)) : '—'} · Đang canh: ${rw.activeCount !== undefined ? rw.activeCount : reservations.filter((x) => x.active !== false).length}/${reservations.length}${rw.lastError ? ` · <span style="color:var(--apg-danger)">${escapeHtml(rw.lastError)}</span>` : ''}</div>
+        </div>
+        <div class="resv-wrap">
+          ${reservations.length === 0
+            ? '<div class="empty">Chưa có chỗ giữ nào được theo dõi. Bấm "Quét ngay" (cần session Muadi còn sống).</div>'
+            : `<table class="resv-table">
+              <thead><tr>
+                <th>Hãng</th><th>PNR</th><th>Hành trình</th><th>Khách hàng</th>
+                <th class="num">Giá giữ</th><th class="num">Giá hiện tại</th>
+                <th>Thời gian giữ chỗ</th><th>Ngày đặt</th><th>Trạng thái</th><th>Người dùng</th><th>Canh giá</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>`}
+        </div>
+        <style>
+          .resv-wrap { overflow-x: auto; border-top: 1px solid var(--apg-border); }
+          .resv-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 980px; }
+          .resv-table th, .resv-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--apg-border); vertical-align: top; white-space: nowrap; }
+          .resv-table thead th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--apg-text-secondary); background: var(--apg-surface-2, rgba(0,0,0,.02)); position: sticky; top: 0; }
+          .resv-table td.num, .resv-table th.num { text-align: right; }
+          .resv-table tbody tr:hover { background: var(--apg-surface-2, rgba(0,0,0,.02)); }
+          .resv-table .pnr { font-weight: 600; }
+          .resv-table .price-now .mono { font-weight: 600; }
+          .resv-table .sub { font-size: 11px; margin-top: 2px; }
+          .resv-table .change { font-weight: 600; }
+          .resv-table .change.change-down { color: var(--apg-success); }
+          .resv-table .change.change-up { color: var(--apg-danger); }
+          .resv-table tr.resv-inactive td { opacity: .55; }
+          .resv-table tr.resv-inactive .watch-cell { opacity: 1; }
+          .resv-table .btn-xs { padding: 1px 6px; font-size: 10px; }
+          .air-chip { display: inline-block; min-width: 30px; text-align: center; padding: 2px 8px; border-radius: 6px; font-weight: 700; font-size: 11px; background: var(--apg-aviation-navy-soft); color: var(--apg-aviation-navy); }
+          .air-chip.air-vn { background: #eaf3ff; color: #16639b; }
+          .air-chip.air-vj { background: #ffeaea; color: #d83a3a; }
+          .air-chip.air-qh { background: #e9f7ef; color: #1c8a4d; }
+          .air-chip.air-vu { background: #fff3e0; color: #c47a00; }
+          .air-chip.air-9g { background: #fde8ef; color: #b3275e; }
+        </style>
+      </div>
+    `;
+  }
+
+  async function patchReservationWatch(patch) {
+    try {
+      const data = await apiFetch('/reservation-watch/settings', { method: 'PATCH', body: JSON.stringify(patch) });
+      state.reservationWatch = (data && data.status) || state.reservationWatch;
+      toast('Đã lưu cấu hình canh giá', 'success');
+      renderSettingsView();
+    } catch (err) {
+      toast(err.message || 'Lưu cấu hình lỗi', 'error');
+    }
+  }
+
+  function bindReservationWatchEvents() {
+    const rw = state.reservationWatch || {};
+    const enabledSwitch = $('rwEnabled');
+    if (enabledSwitch) enabledSwitch.addEventListener('click', () => patchReservationWatch({ enabled: !rw.enabled }));
+    $$('#root .seg button[data-rw-scope]').forEach((btn) => {
+      btn.addEventListener('click', () => patchReservationWatch({ scope: btn.dataset.rwScope }));
+    });
+    const intervalInput = $('rwInterval');
+    if (intervalInput) intervalInput.addEventListener('change', () => patchReservationWatch({ intervalMinutes: Number(intervalInput.value) }));
+    const minDrop = $('rwMinDrop');
+    if (minDrop) minDrop.addEventListener('change', () => patchReservationWatch({ minDropAmount: Number(minDrop.value) }));
+    $$('#root .rw-override').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const pnr = btn.dataset.pnr;
+        const on = btn.dataset.on === '1';
+        btn.disabled = true;
+        try {
+          await apiFetch('/reservation-watch/override', { method: 'POST', body: JSON.stringify({ pnr, on }) });
+          toast(on ? `Đã kích hoạt canh giá ${pnr}` : `Đã tắt canh giá ${pnr}`, 'success');
+          await loadSettings();
+          renderSettingsView();
+        } catch (err) {
+          toast(err.message || 'Lỗi cập nhật', 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+    const runNow = $('rwRunNow');
+    if (runNow) {
+      runNow.addEventListener('click', async () => {
+        runNow.disabled = true; runNow.classList.add('busy');
+        toast('Đang quét chỗ giữ…', 'info');
+        try {
+          const data = await apiFetch('/reservation-watch/run-now', { method: 'POST', body: '{}' });
+          const r = data && data.result;
+          toast(`Quét xong: ${r ? r.reservations : 0} chỗ, ${r ? r.alertsSent : 0} cảnh báo`, 'success');
+          await loadSettings();
+          renderSettingsView();
+        } catch (err) {
+          toast(err.message || 'Quét lỗi', 'error');
+        } finally {
+          runNow.disabled = false; runNow.classList.remove('busy');
+        }
+      });
+    }
   }
 
   // ─── Price chart (pure SVG) ───────────────────────

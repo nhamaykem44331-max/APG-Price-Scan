@@ -89,26 +89,27 @@ function isStillOnLoginPage(url) {
  * Thử đăng nhập 1 lần
  * Return: 'success' | 'captcha_wrong' | 'credentials_wrong' | 'unknown_error'
  */
-async function attemptLogin(page, attemptNum) {
-  logger.info(`\n🔄 Lần thử ${attemptNum}:`);
+async function attemptLogin(page, attemptNum, account) {
+  const creds = account || config.credentials;
+  logger.info(`\n🔄 Lần thử ${attemptNum}${account ? ` (tài khoản ${creds.username})` : ''}:`);
 
   // Chỉ điền username/password/agency 1 lần đầu
   if (attemptNum === 1) {
     await page.fill(config.selectors.usernameInput, '');
-    await page.fill(config.selectors.usernameInput, config.credentials.username);
-    logger.info(`  ✓ Username: ${config.credentials.username}`);
+    await page.fill(config.selectors.usernameInput, creds.username);
+    logger.info(`  ✓ Username: ${creds.username}`);
 
     await page.fill(config.selectors.passwordInput, '');
-    await page.fill(config.selectors.passwordInput, config.credentials.password);
-    logger.info(`  ✓ Password: ${'*'.repeat(config.credentials.password.length)}`);
+    await page.fill(config.selectors.passwordInput, creds.password);
+    logger.info(`  ✓ Password: ${'*'.repeat(String(creds.password || '').length)}`);
 
     // Mã đại lý - có thể đã được điền sẵn (AML)
     const currentAgency = await page.inputValue(config.selectors.agencyCodeInput).catch(() => '');
-    if (currentAgency !== config.credentials.agencyCode) {
+    if (currentAgency !== creds.agencyCode) {
       await page.fill(config.selectors.agencyCodeInput, '');
-      await page.fill(config.selectors.agencyCodeInput, config.credentials.agencyCode);
+      await page.fill(config.selectors.agencyCodeInput, creds.agencyCode);
     }
-    logger.info(`  ✓ Mã đại lý: ${config.credentials.agencyCode}`);
+    logger.info(`  ✓ Mã đại lý: ${creds.agencyCode}`);
   }
 
   // Đọc captcha từ canvas
@@ -215,11 +216,12 @@ async function attachLoginRouteFilter(context) {
   }
 }
 
-async function login(browser) {
+async function login(browser, account) {
+  const sessionFile = (account && account.sessionFile) || config.paths.sessionFile;
   if (!fs.existsSync(config.paths.screenshotDir)) {
     fs.mkdirSync(config.paths.screenshotDir, { recursive: true });
   }
-  const sessionDir = path.dirname(config.paths.sessionFile);
+  const sessionDir = path.dirname(sessionFile);
   if (!fs.existsSync(sessionDir)) {
     fs.mkdirSync(sessionDir, { recursive: true });
   }
@@ -260,12 +262,12 @@ async function login(browser) {
     const attemptResults = [];
 
     for (let i = 1; i <= config.captcha.maxRetry; i++) {
-      result = await attemptLogin(page, i);
+      result = await attemptLogin(page, i, account);
       attemptResults.push(result);
 
       if (result === 'success') {
-        await context.storageState({ path: config.paths.sessionFile });
-        logger.info(`\n💾 Session đã lưu: ${config.paths.sessionFile}`);
+        await context.storageState({ path: sessionFile });
+        logger.info(`\n💾 Session đã lưu: ${sessionFile}`);
 
         if (!SKIP_HAPPY_SCREENSHOTS) {
           await page.screenshot({

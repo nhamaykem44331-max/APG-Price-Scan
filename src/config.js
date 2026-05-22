@@ -6,6 +6,38 @@
 
 require('dotenv').config();
 
+const DEFAULT_SESSION_FILE = process.env.SESSION_FILE || './session/storage-state.json';
+
+// Hỗ trợ NHIỀU tài khoản đại lý: tài khoản chính (NAMTHANH_USERNAME...) + các tài khoản
+// đánh số NAMTHANH_USERNAME_2/_3... Mỗi tài khoản có session file riêng để giữ token độc lập.
+// Watcher quét lần lượt từng tài khoản để gom hết PNR đang giữ trên toàn hệ thống.
+function buildAccounts() {
+  const list = [];
+  if (process.env.NAMTHANH_USERNAME) {
+    list.push({
+      id: 'primary',
+      username: process.env.NAMTHANH_USERNAME,
+      password: process.env.NAMTHANH_PASSWORD,
+      agencyCode: process.env.NAMTHANH_AGENCY_CODE,
+      sessionFile: DEFAULT_SESSION_FILE,
+    });
+  }
+  for (let i = 2; i <= 9; i += 1) {
+    const username = process.env[`NAMTHANH_USERNAME_${i}`];
+    const password = process.env[`NAMTHANH_PASSWORD_${i}`];
+    if (username && password) {
+      list.push({
+        id: `account${i}`,
+        username,
+        password,
+        agencyCode: process.env[`NAMTHANH_AGENCY_CODE_${i}`] || process.env.NAMTHANH_AGENCY_CODE,
+        sessionFile: process.env[`SESSION_FILE_${i}`] || `./session/storage-state-${i}.json`,
+      });
+    }
+  }
+  return list;
+}
+
 module.exports = {
   loginUrl: 'https://booking.namthanh.vn/login',
 
@@ -14,6 +46,9 @@ module.exports = {
     password: process.env.NAMTHANH_PASSWORD,
     agencyCode: process.env.NAMTHANH_AGENCY_CODE,
   },
+
+  // Danh sách tài khoản để watcher quét nhiều tài khoản. Phần tử [0] = tài khoản chính.
+  accounts: buildAccounts(),
 
   // Selectors CHÍNH XÁC cho namthanh.vn
   selectors: {

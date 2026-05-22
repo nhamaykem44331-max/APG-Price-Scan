@@ -1,4 +1,5 @@
 const { runLogin } = require('../session-login');
+const config = require('../config');
 const { MuadiApiClient, MuadiApiError } = require('../muadi-client');
 const {
   cheapestFare,
@@ -9,7 +10,18 @@ const {
 } = require('../booking-workflow');
 const logger = require('../logger');
 
-let loginInflight = null;
+// Dedup login đang chạy, theo từng tài khoản (key = account.id), để hỗ trợ quét nhiều tài khoản.
+const loginInflight = new Map();
+
+function primaryAccount() {
+  return (config.accounts && config.accounts[0]) || null;
+}
+
+function clientFor(account) {
+  return account && account.sessionFile
+    ? new MuadiApiClient({ sessionFile: account.sessionFile })
+    : new MuadiApiClient();
+}
 
 function normalizeAirport(value) {
   return String(value || '').trim().toUpperCase();
@@ -74,30 +86,33 @@ function shouldRetryWithLogin(error) {
   return error.status === 401 || code === '12' || code === '18' || /token|session time out/i.test(message);
 }
 
-async function runLoginOnce() {
-  if (!loginInflight) {
-    logger.warn('[scanner] Triggering Playwright login during scan — may add up to 30s latency for this tick.');
-    loginInflight = runLogin({ headless: true }).finally(() => {
-      loginInflight = null;
+async function runLoginOnce(account) {
+  const key = account ? account.id : 'primary';
+  if (!loginInflight.has(key)) {
+    logger.warn(`[scanner] Triggering Playwright login (${account ? account.username : 'primary'}) during scan — may add up to 30s latency for this tick.`);
+    const inflight = runLogin({ headless: true, account: account || undefined }).finally(() => {
+      loginInflight.delete(key);
     });
+    loginInflight.set(key, inflight);
   }
-  return loginInflight;
+  return loginInflight.get(key);
 }
 
-async function createClientOrLogin() {
+async function createClientOrLogin(account) {
   try {
-    return new MuadiApiClient();
+    return clientFor(account);
   } catch (error) {
     if (!/session|accessToken|localStorage/i.test(error && error.message ? error.message : String(error))) {
       throw error;
     }
-    await runLoginOnce();
-    return new MuadiApiClient();
+    await runLoginOnce(account);
+    return clientFor(account);
   }
 }
 
-async function withScannerAutoLogin(operation) {
-  let client = await createClientOrLogin();
+// Bọc 1 operation Muadi cho MỘT tài khoản cụ thể: tự login/refresh-token/retry-401 cho account đó.
+async function withAccountAutoLogin(account, operation) {
+  let client = await createClientOrLogin(account);
   try {
     return await operation(client);
   } catch (error) {
@@ -106,17 +121,22 @@ async function withScannerAutoLogin(operation) {
     try {
       const refreshed = await client.tryRefreshToken();
       if (refreshed) {
-        client = new MuadiApiClient();
+        client = clientFor(account);
         return operation(client);
       }
     } catch (_) {
       // Fall through to full login.
     }
 
-    await runLoginOnce();
-    client = new MuadiApiClient();
+    await runLoginOnce(account);
+    client = clientFor(account);
     return operation(client);
   }
+}
+
+// Tương thích cũ: scanner mặc định dùng tài khoản chính.
+async function withScannerAutoLogin(operation) {
+  return withAccountAutoLogin(primaryAccount(), operation);
 }
 
 function normalizeFlightResult(flight, fare, index) {
@@ -234,4 +254,6 @@ module.exports = {
   normalizeTime,
   scanJob,
   timeInWindow,
+  withScannerAutoLogin,
+  withAccountAutoLogin,
 };

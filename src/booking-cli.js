@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { runLogin } = require('./session-login');
+const { runLogin, runLoginAll } = require('./session-login');
 const { MuadiApiClient, MuadiApiError } = require('./muadi-client');
 const {
   formatMoney,
@@ -240,8 +240,15 @@ async function main() {
   }
 
   if (command === 'login') {
-    await runLogin({ headless: !args.showBrowser });
-    logger.success('Login OK. Session was saved.');
+    // Đăng nhập TẤT CẢ tài khoản cấu hình (primary + NAMTHANH_USERNAME_2...).
+    const results = await runLoginAll({ headless: !args.showBrowser });
+    for (const r of results) {
+      if (r.ok) logger.success(`Login OK: ${r.username || r.account} → session saved.`);
+      else logger.error(`Login FAILED: ${r.username || r.account} — ${r.error}`);
+    }
+    if (results.some((r) => !r.ok)) {
+      throw new Error('Một hoặc nhiều tài khoản đăng nhập thất bại (xem log).');
+    }
     return;
   }
 

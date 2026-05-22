@@ -51,6 +51,14 @@ function encryptMuadi(value) {
   return cipher.update(text, 'utf8', 'base64') + cipher.final('base64');
 }
 
+function formatDateDMY(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+}
+
 function parseJson(value, fallback = null) {
   if (!value) return fallback;
   try {
@@ -484,6 +492,34 @@ class MuadiApiClient {
 
   getTicketInfoBySessionId(sessionID) {
     return this.post('booking/ticket-info-by-id', { sessionID }, { version: '3', safeToRetry: false });
+  }
+
+  // Danh sách giữ chỗ/booking đứng sau trang booking.namthanh.vn/booking/reservation-status.
+  // Body PHẢI mã hoá ({encrypted: ...}) và chứa filter — đã verify bằng capture thật:
+  //   {"fromDate":"DD-MM-YYYY","toDate":"DD-MM-YYYY","username":"","customerName":"",
+  //    "customerPhone":"","PNRCode":"","bookingStatus":"","serviceType":"Flights"}
+  // SPA mặc định fromDate=toDate=hôm nay; watcher dùng cửa sổ lookback để bắt cả chỗ giữ
+  // từ vài ngày trước (timelimit chưa hết) bất kể múi giờ deploy.
+  listBooking(options = {}) {
+    const lookbackDays = Number.isFinite(options.lookbackDays) ? options.lookbackDays : 7;
+    const now = options.now instanceof Date ? options.now : new Date();
+    const from = new Date(now.getTime() - lookbackDays * 86400000);
+    const to = new Date(now.getTime() + 86400000); // +1 ngày phòng lệch múi giờ (server UTC vs VN)
+    const filter = {
+      fromDate: options.fromDate || formatDateDMY(from),
+      toDate: options.toDate || formatDateDMY(to),
+      username: options.username || '',
+      customerName: options.customerName || '',
+      customerPhone: options.customerPhone || '',
+      PNRCode: options.PNRCode || '',
+      bookingStatus: options.bookingStatus || '',
+      serviceType: options.serviceType || 'Flights',
+    };
+    return this.post('management/list-booking', filter, {
+      version: null,
+      safeToRetry: true,
+      timeout: 20000,
+    });
   }
 }
 
