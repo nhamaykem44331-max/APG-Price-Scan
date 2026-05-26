@@ -1573,6 +1573,17 @@
       const routeSub = [r.flightNumber, r.date, r.departTime].filter(Boolean).join(' · ');
       const seats = (r.lastSeats !== undefined && r.lastSeats !== null) ? `${escapeHtml(String(r.lastSeats))} ghế` : '';
       const pnr = escapeHtml(r.pnr || '');
+      // Số khách thật của PNR (lấy từ booking-view; list-booking không trả pax).
+      const paxTotal = Number(r.paxTotal) || (Number(r.adt || 1) + Number(r.chd || 0) + Number(r.inf || 0));
+      const paxKnown = r.paxKnown === true;
+      const paxBreak = [
+        Number(r.adt) > 0 ? `${r.adt} NL` : '',
+        Number(r.chd) > 0 ? `${r.chd} TE` : '',
+        Number(r.inf) > 0 ? `${r.inf} EB` : '',
+      ].filter(Boolean).join(' · ');
+      const paxCell = paxKnown
+        ? `<b>${paxTotal}</b>${paxTotal > 1 && paxBreak ? `<div class="muted sub">${escapeHtml(paxBreak)}</div>` : ''}`
+        : `<span class="muted" title="Chưa lấy được số khách — tạm tính 1">~${paxTotal}</span>`;
       let nowCell;
       if (!active) {
         nowCell = `<span class="muted">${hasNow ? `${money(now)} ₫` : '—'} <span class="sub">(đã dừng)</span></span>`;
@@ -1589,6 +1600,7 @@
         <td><span class="mono pnr">${escapeHtml(r.pnr || '—')}</span>${r.lastAlertAt ? '<div><span class="badge warn">đã báo</span></div>' : ''}</td>
         <td><b>${escapeHtml((r.from || '') + ' → ' + (r.to || ''))}</b>${routeSub ? `<div class="muted sub">${escapeHtml(routeSub)}</div>` : ''}</td>
         <td>${escapeHtml(r.customerName || '—')}</td>
+        <td class="num">${paxCell}</td>
         <td class="num"><span class="mono">${money(held)} ₫</span></td>
         <td class="num price-now">${nowCell}</td>
         <td>${escapeHtml(r.timelimit || '—')}</td>
@@ -1633,7 +1645,7 @@
             ? '<div class="empty">Chưa có chỗ giữ nào được theo dõi. Bấm "Quét ngay" (cần session Muadi còn sống).</div>'
             : `<table class="resv-table">
               <thead><tr>
-                <th>Hãng</th><th>PNR</th><th>Hành trình</th><th>Khách hàng</th>
+                <th>Hãng</th><th>PNR</th><th>Hành trình</th><th>Khách hàng</th><th class="num">Số khách</th>
                 <th class="num">Giá giữ</th><th class="num">Giá hiện tại</th>
                 <th>Thời gian giữ chỗ</th><th>Ngày đặt</th><th>Trạng thái</th><th>Người dùng</th><th>Canh giá</th>
               </tr></thead>

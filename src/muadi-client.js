@@ -189,6 +189,24 @@ class MuadiApiError extends Error {
   }
 }
 
+// Tìm mảng hành khách "master" trong response management/booking-view: mảng mà mỗi phần tử
+// có tên (firstName/lastName/fullName/title) + paxType. Dùng để đếm số khách thật của 1 PNR.
+function findPaxArray(obj, depth = 0) {
+  if (!obj || depth > 6) return null;
+  if (Array.isArray(obj)) {
+    if (obj.length && obj.every((x) => x && typeof x === 'object')) {
+      const keys = Object.keys(obj[0]).join(',');
+      if (/firstName|lastName|fullName|title/i.test(keys) && /paxType|type/i.test(keys)) return obj;
+    }
+    for (const x of obj) { const r = findPaxArray(x, depth + 1); if (r) return r; }
+    return null;
+  }
+  if (typeof obj === 'object') {
+    for (const v of Object.values(obj)) { const r = findPaxArray(v, depth + 1); if (r) return r; }
+  }
+  return null;
+}
+
 class MuadiApiClient {
   constructor(options = {}) {
     this.baseUrl = options.baseUrl || BASE_URL;
@@ -520,6 +538,36 @@ class MuadiApiClient {
       safeToRetry: true,
       timeout: 20000,
     });
+  }
+
+  // Chi tiết 1 booking (đứng sau trang booking/booking-detail/:id). Tham số ID = `id` từ list-booking.
+  getBookingView(id) {
+    return this.post('management/booking-view', { ID: id }, { version: '2', safeToRetry: true, timeout: 15000 });
+  }
+
+  // Đếm SỐ KHÁCH thật của 1 booking theo bookingId (list-booking KHÔNG trả pax).
+  // → { adt, chd, inf, total, paxKnown }. paxKnown=false nếu không lấy được (fallback 1 ADT).
+  async getBookingPax(id) {
+    const fallback = { adt: 1, chd: 0, inf: 0, total: 1, paxKnown: false };
+    if (id === undefined || id === null || id === '') return fallback;
+    let res;
+    try {
+      res = await this.getBookingView(id);
+    } catch (_) {
+      return fallback;
+    }
+    const node = res && (res.data !== undefined ? res.data : res);
+    const pax = findPaxArray(node);
+    if (!Array.isArray(pax) || pax.length === 0) return fallback;
+    let adt = 0, chd = 0, inf = 0;
+    for (const p of pax) {
+      const t = String((p && (p.paxType || p.type)) || '').toUpperCase();
+      if (t.includes('INF')) inf += 1;
+      else if (t.includes('CHD') || t.includes('CHILD')) chd += 1;
+      else adt += 1; // ADT hoặc không rõ → coi là người lớn
+    }
+    const total = adt + chd + inf;
+    return { adt, chd, inf, total: total || pax.length, paxKnown: true };
   }
 }
 

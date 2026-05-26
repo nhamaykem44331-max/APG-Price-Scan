@@ -128,7 +128,36 @@ function createReservationWatcher(options = {}) {
       heldPrice: r.heldPrice, timelimit: r.timelimitDisplay || '', bookingTime: r.bookingTime || '',
       status: r.status, statusLabel: r.statusLabel,
       adt: r.adt, chd: r.chd, inf: r.inf, paxKnown: r.paxKnown,
+      paxTotal: Number(r.paxTotal) || (Number(r.adt || 1) + Number(r.chd || 0) + Number(r.inf || 0)),
     };
+  }
+
+  // Lấy SỐ KHÁCH thật của 1 PNR. list-booking KHÔNG trả pax → nếu để mặc định 1 khách thì
+  // booking nhiều khách bị so giá sai (held = N×giá, currentTotal ×1 → "rớt giá" giả).
+  // Cache trong store (pax 1 PNR không đổi) → chỉ gọi management/booking-view 1 lần/PNR.
+  async function resolveReservationPax(r, prev) {
+    if (prev && prev.paxKnown && Number(prev.paxTotal) > 0) {
+      r.adt = Number(prev.adt) || 1;
+      r.chd = Number(prev.chd) || 0;
+      r.inf = Number(prev.inf) || 0;
+      r.paxKnown = true;
+      r.paxTotal = Number(prev.paxTotal);
+      return;
+    }
+    if (r.bookingId) {
+      try {
+        const pax = await withAccountAutoLogin(r._account || null, (client) => client.getBookingPax(r.bookingId));
+        if (pax && pax.paxKnown && pax.total > 0) {
+          r.adt = pax.adt; r.chd = pax.chd; r.inf = pax.inf;
+          r.paxKnown = true; r.paxTotal = pax.total;
+          logger.info('[reservation-watch] pax resolved', { pnr: r.pnr, adt: pax.adt, chd: pax.chd, inf: pax.inf });
+          return;
+        }
+      } catch (paxErr) {
+        logger.warn('[reservation-watch] getBookingPax failed', { pnr: r.pnr, error: paxErr && paxErr.message });
+      }
+    }
+    r.paxTotal = totalPaxOf(r); // fallback: pax chưa biết (paxKnown=false) → guard SANE_DROP_RATIO bảo vệ
   }
 
   async function processReservation(r, s) {
@@ -156,9 +185,12 @@ function createReservationWatcher(options = {}) {
       return { alerted: false };
     }
 
+    // Số khách thật (list-booking KHÔNG trả pax → mặc định 1, gây so giá sai cho booking nhiều khách).
+    const prev = store.getReservation(r.pnr) || {};
+    await resolveReservationPax(r, prev);
+
     // Re-scan giá bằng CHÍNH tài khoản đã giữ chỗ (giá theo hợp đồng có thể khác nhau giữa tài khoản).
     const scan = await withAccountAutoLogin(r._account || null, (client) => scanReservationFare(client, r));
-    const prev = store.getReservation(r.pnr) || {};
     const heldPrice = Number(r.heldPrice);
     const minDrop = Number(s.minDropAmount) || 0;
     const currentTotal = scan.currentTotal;
