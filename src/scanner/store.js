@@ -18,6 +18,26 @@ function randomId(prefix) {
   return `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
 }
 
+// "DD-MM-YYYY HH:MM[:SS]" → epoch ms. Dùng để sort reservation theo ngày tạo booking thật.
+function parseVnDateMs(value) {
+  const t = String(value || '');
+  const m = t.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return 0;
+  const ms = new Date(
+    Number(m[3]), Number(m[2]) - 1, Number(m[1]),
+    Number(m[4] || 0), Number(m[5] || 0), Number(m[6] || 0)
+  ).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+// Khoá sort cho reservation: ưu tiên bookingTime (ngày tạo trên Muadi), fallback updatedAt.
+function reservationSortKey(r) {
+  const fromBooking = parseVnDateMs(r && r.bookingTime);
+  if (fromBooking > 0) return fromBooking;
+  const upd = r && r.updatedAt ? Date.parse(r.updatedAt) : 0;
+  return Number.isFinite(upd) ? upd : 0;
+}
+
 function defaultReservationSettings() {
   return {
     enabled: String(process.env.RESERVATION_WATCH_ENABLED || 'true').toLowerCase() !== 'false',
@@ -208,11 +228,38 @@ class ScanStore {
   }
 
   listReservations() {
+    // Sort: chỗ đang giữ (active !== false) LÊN ĐẦU, các trạng thái khác (quá hạn / void / đã thanh toán)
+    // xuống dưới. Trong mỗi nhóm: mới tạo booking trước (theo bookingTime, fallback updatedAt).
     return clone(
       (this.load().reservations || [])
         .slice()
-        .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
+        .sort((a, b) => {
+          const aActive = a.active !== false;
+          const bActive = b.active !== false;
+          if (aActive !== bActive) return aActive ? -1 : 1;
+          return reservationSortKey(b) - reservationSortKey(a);
+        })
     );
+  }
+
+  // Giới hạn số PNR INACTIVE (quá hạn / void/huỷ / đã thanh toán) còn lưu trong store.
+  // Vượt quá `maxKeep` thì xoá vĩnh viễn các PNR cũ nhất theo bookingTime (fallback updatedAt).
+  // Các PNR đang giữ chỗ (active !== false) KHÔNG bị ảnh hưởng.
+  pruneInactiveReservations(maxKeep = 15) {
+    return this.mutate((data) => {
+      const all = data.reservations || [];
+      const inactive = all
+        .filter((r) => r.active === false)
+        .sort((a, b) => reservationSortKey(b) - reservationSortKey(a));
+      if (inactive.length <= maxKeep) return { removed: 0 };
+      const toRemove = new Set(
+        inactive.slice(maxKeep).map((r) => String(r.pnr || '').toUpperCase())
+      );
+      data.reservations = all.filter(
+        (r) => !toRemove.has(String(r.pnr || '').toUpperCase())
+      );
+      return { removed: toRemove.size };
+    });
   }
 
   getReservation(pnr) {

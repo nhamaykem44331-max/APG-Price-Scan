@@ -325,6 +325,11 @@ function staticContentType(filePath) {
   if (ext === '.js') return 'application/javascript; charset=utf-8';
   if (ext === '.css') return 'text/css; charset=utf-8';
   if (ext === '.json') return 'application/json; charset=utf-8';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.svg') return 'image/svg+xml';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.ico') return 'image/x-icon';
   return 'application/octet-stream';
 }
 
@@ -335,7 +340,11 @@ function staticFileForPath(pathname) {
     '/static/app.js': 'app.js',
     '/static/styles.css': 'styles.css',
   };
-  return routes[pathname] ? path.join(PUBLIC_DIR, routes[pathname]) : null;
+  if (routes[pathname]) return path.join(PUBLIC_DIR, routes[pathname]);
+  // Cho phép truy cập file ảnh tĩnh trong public/airline-logos/ (chỉ ảnh, không cho path traversal).
+  const logoMatch = /^\/airline-logos\/([A-Za-z0-9_-]{1,16}\.(?:png|jpg|jpeg|svg|webp))$/.exec(pathname);
+  if (logoMatch) return path.join(PUBLIC_DIR, 'airline-logos', logoMatch[1]);
+  return null;
 }
 
 function sendStatic(req, res, pathname) {
@@ -496,7 +505,8 @@ function isPublicPath(pathname) {
     pathname === '/admin/logout' ||
     pathname === '/' ||
     pathname === '/app' ||
-    pathname.startsWith('/static/')
+    pathname.startsWith('/static/') ||
+    pathname.startsWith('/airline-logos/')
   );
 }
 

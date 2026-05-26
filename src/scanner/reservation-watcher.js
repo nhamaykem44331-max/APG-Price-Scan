@@ -24,6 +24,12 @@ const logger = require('../logger');
 
 const MIN_INTERVAL_MINUTES = 5;
 
+// Giữ tối đa 15 PNR INACTIVE (quá hạn / void/huỷ / đã thanh toán) gần nhất; vượt thì xoá vĩnh viễn.
+const MAX_INACTIVE_RESERVATIONS_KEEP = Math.max(
+  0,
+  Number.parseInt(process.env.RESERVATION_INACTIVE_MAX_KEEP || '15', 10) || 15
+);
+
 function totalPaxOf(reservation) {
   const adt = Number(reservation.adt) || 1;
   const chd = Number(reservation.chd) || 0;
@@ -338,6 +344,14 @@ function createReservationWatcher(options = {}) {
           });
         }
       }
+
+      // Sau khi đã upsert đầy đủ trạng thái active/inactive cho cycle này, xoá vĩnh viễn các PNR
+      // inactive cũ vượt quá ngưỡng (mặc định 15). Held PNR không bị ảnh hưởng.
+      const pruneRes = store.pruneInactiveReservations(MAX_INACTIVE_RESERVATIONS_KEEP);
+      if (pruneRes && pruneRes.removed) {
+        logger.info('[reservation-watch] pruned inactive reservations', { removed: pruneRes.removed, keep: MAX_INACTIVE_RESERVATIONS_KEEP });
+      }
+
       lastError = accountErrors.length ? accountErrors.join(' | ') : null;
     } catch (err) {
       lastError = String((err && err.message) || err);

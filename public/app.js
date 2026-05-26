@@ -1563,16 +1563,21 @@
   }
 
   const AIRLINE_META = {
-    VN: { name: 'Vietnam Airlines', cls: 'air-vn' },
-    VJ: { name: 'Vietjet Air', cls: 'air-vj' },
-    QH: { name: 'Bamboo Airways', cls: 'air-qh' },
-    VU: { name: 'Vietravel Airlines', cls: 'air-vu' },
-    '9G': { name: 'Sun PhuQuoc Airways', cls: 'air-9g' },
+    VN: { name: 'Vietnam Airlines', cls: 'air-vn', logo: 'airline-logos/VN.png' },
+    VJ: { name: 'Vietjet Air', cls: 'air-vj', logo: 'airline-logos/VJ.png' },
+    QH: { name: 'Bamboo Airways', cls: 'air-qh', logo: 'airline-logos/QH.png' },
+    VU: { name: 'Vietravel Airlines', cls: 'air-vu', logo: 'airline-logos/VU.png' },
+    '9G': { name: 'Sun PhuQuoc Airways', cls: 'air-9g', logo: 'airline-logos/9G.png' },
   };
   function airlineChip(code) {
     const c = String(code || '').toUpperCase();
     const meta = AIRLINE_META[c] || { name: c || '—', cls: 'air-x' };
-    return `<span class="air-chip ${meta.cls}" title="${escapeHtml(meta.name)}">${escapeHtml(c || '—')}</span>`;
+    const label = escapeHtml(c || '—');
+    if (meta.logo) {
+      // Fallback về text chip nếu ảnh load lỗi (onerror).
+      return `<span class="air-chip air-chip-logo ${meta.cls}" title="${escapeHtml(meta.name)}"><img src="${meta.logo}" alt="${label}" onerror="this.parentNode.classList.remove('air-chip-logo');this.replaceWith(document.createTextNode('${label}'));"/></span>`;
+    }
+    return `<span class="air-chip ${meta.cls}" title="${escapeHtml(meta.name)}">${label}</span>`;
   }
   function statusBadgeClass(label) {
     switch (label) {
@@ -1703,6 +1708,8 @@
           .air-chip.air-qh { background: #e9f7ef; color: #1c8a4d; }
           .air-chip.air-vu { background: #fff3e0; color: #c47a00; }
           .air-chip.air-9g { background: #fde8ef; color: #b3275e; }
+          .air-chip.air-chip-logo { padding: 2px; min-width: 36px; background: #fff; border: 1px solid var(--apg-border, #e2e6ec); }
+          .air-chip.air-chip-logo img { display: block; width: 32px; height: 18px; object-fit: contain; }
         </style>
       </div>
     `;

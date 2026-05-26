@@ -51,6 +51,18 @@ function makeStore(settingsOverride = {}) {
       for (const k of [...reservations.keys()]) if (!keep.has(k)) reservations.delete(k);
       return { removed: 0 };
     },
+    pruneInactiveReservations: (maxKeep = 15) => {
+      const inactive = [...reservations.values()]
+        .filter((r) => r.active === false)
+        .sort((a, b) => String(b.bookingTime || '').localeCompare(String(a.bookingTime || '')));
+      if (inactive.length <= maxKeep) return { removed: 0 };
+      let removed = 0;
+      for (const r of inactive.slice(maxKeep)) {
+        reservations.delete(String(r.pnr).toUpperCase());
+        removed += 1;
+      }
+      return { removed };
+    },
     listReservations: () => [...reservations.values()],
   };
 }
