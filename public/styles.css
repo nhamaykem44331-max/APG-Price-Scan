@@ -561,6 +561,38 @@ button, input, select, textarea {
   color: var(--apg-text-primary);
 }
 
+/* Channel picker dropdown (Test notify) */
+.channel-menu {
+  position: fixed;
+  z-index: 2000;
+  background: var(--apg-surface, #fff);
+  border: 1px solid var(--apg-border, #e0e0e0);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.13);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 150px;
+}
+.channel-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--apg-text, #222);
+  text-align: left;
+  width: 100%;
+  transition: background .12s;
+}
+.channel-menu-item:hover { background: var(--apg-bg-surface-muted, #f4f4f4); }
+.channel-menu-item svg { flex-shrink: 0; }
+
 /* Auto-refresh status chip — informational, not clickable */
 .auto-refresh-chip {
   display: inline-flex;

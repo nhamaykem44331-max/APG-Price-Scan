@@ -188,7 +188,7 @@ async function sendReservationAlert(reservation, scan, options = {}) {
   const timelimit = reservation.timelimitDisplay || reservation.timelimit || '';
 
   const lines = [
-    isDrop ? `🔻 GIÁ GIẢM dưới giá giữ chỗ` : `🔺 GIÁ TĂNG trên giá giữ chỗ`,
+    isDrop ? `🟢 GIÁ GIẢM dưới giá giữ chỗ` : `🔺 GIÁ TĂNG trên giá giữ chỗ`,
     `PNR: ${reservation.pnr} · ${reservation.flightNumber} ${route} · ${reservation.date}`,
     `Giá giữ: ${money(held)} ₫`,
     `Giá hiện tại: ${money(now)} ₫ (${money(scan.perAdult)} ₫/khách × ${pax})`,

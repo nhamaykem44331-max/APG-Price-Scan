@@ -1264,20 +1264,45 @@
   }
 
   // ─── Test notify (from any context) ──────────────
-  async function testNotify_handler() {
+  async function sendTestToChannel(channel) {
     const text = `Price Scan test ${new Date().toISOString()}`;
     try {
-      await apiFetch('/notifications/test', { method: 'POST', body: JSON.stringify({ text }) });
-      toast('Đã gửi notify test', 'success');
+      await apiFetch(`/notifications/${channel}/test`, { method: 'POST', body: JSON.stringify({ text }) });
+      toast(`Đã gửi ${channel === 'zalo' ? 'Zalo' : 'Telegram'} test ✓`, 'success');
     } catch (err) {
-      // Fallback to telegram endpoint
-      try {
-        await apiFetch('/notifications/telegram/test', { method: 'POST', body: JSON.stringify({ text }) });
-        toast('Đã gửi Telegram test', 'success');
-      } catch (e2) {
-        toast(e2.message || 'Test notify fail', 'error');
-      }
+      toast(err.message || `${channel} test thất bại`, 'error');
     }
+  }
+
+  function testNotify_handler(e) {
+    const existing = document.getElementById('testNotifyMenu');
+    if (existing) { existing.remove(); return; }
+
+    const btn = e.currentTarget;
+    const rect = btn.getBoundingClientRect();
+
+    const menu = document.createElement('div');
+    menu.id = 'testNotifyMenu';
+    menu.className = 'channel-menu';
+    menu.innerHTML = `
+      <button class="channel-menu-item" data-ch="telegram">${icon('send', 13)} Telegram</button>
+      <button class="channel-menu-item" data-ch="zalo">${icon('bell', 13)} Zalo</button>
+    `;
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.left = rect.left + 'px';
+    document.body.appendChild(menu);
+
+    menu.querySelectorAll('[data-ch]').forEach((item) => {
+      item.addEventListener('click', () => { menu.remove(); sendTestToChannel(item.dataset.ch); });
+    });
+
+    const closeMenu = (ev) => {
+      if (!menu.contains(ev.target) && ev.target !== btn) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu, true);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu, true), 0);
   }
 
   async function testNotifyForJob(jobId, button) {
