@@ -26,6 +26,7 @@ function defaultReservationSettings() {
       : 'held',
     intervalMinutes: Number.parseInt(process.env.RESERVATION_WATCH_INTERVAL_MINUTES || '30', 10) || 30,
     minDropAmount: Number.parseInt(process.env.RESERVATION_WATCH_MIN_DROP || '0', 10) || 0,
+    alertOnIncrease: String(process.env.RESERVATION_WATCH_ALERT_INCREASE || 'true').toLowerCase() !== 'false',
     channel: 'zalo',
   };
 }

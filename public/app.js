@@ -1627,6 +1627,10 @@
             <div class="label-block"><span class="name">Bật canh giá</span><span class="desc">Tự động chạy nền mỗi ${escapeHtml(String(rw.intervalMinutes || 30))} phút</span></div>
             <div class="switch ${rw.enabled ? 'on' : ''}" id="rwEnabled" role="switch" aria-checked="${!!rw.enabled}" tabindex="0"></div>
           </div>
+          <div class="switch-row">
+            <div class="label-block"><span class="name">Báo cả khi giá tăng</span><span class="desc">Mặc định chỉ báo khi giá giảm; bật để báo cả khi giá vượt giá giữ</span></div>
+            <div class="switch ${rw.alertOnIncrease ? 'on' : ''}" id="rwAlertIncrease" role="switch" aria-checked="${!!rw.alertOnIncrease}" tabindex="0"></div>
+          </div>
           <div class="field-row">
             <label>Phạm vi theo dõi</label>
             <div class="seg">
@@ -1694,6 +1698,8 @@
     const rw = state.reservationWatch || {};
     const enabledSwitch = $('rwEnabled');
     if (enabledSwitch) enabledSwitch.addEventListener('click', () => patchReservationWatch({ enabled: !rw.enabled }));
+    const incSwitch = $('rwAlertIncrease');
+    if (incSwitch) incSwitch.addEventListener('click', () => patchReservationWatch({ alertOnIncrease: !rw.alertOnIncrease }));
     $$('#root .seg button[data-rw-scope]').forEach((btn) => {
       btn.addEventListener('click', () => patchReservationWatch({ scope: btn.dataset.rwScope }));
     });

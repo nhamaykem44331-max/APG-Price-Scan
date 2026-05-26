@@ -173,29 +173,33 @@ function money(value) {
   return Number.isFinite(n) ? n.toLocaleString('vi-VN') : '0';
 }
 
-// Cảnh báo giá vé hiện tại rẻ hơn giá đang giữ chỗ.
-async function sendReservationAlert(reservation, scan) {
+// Cảnh báo biến động giá so với giá đang giữ chỗ (GIẢM hoặc TĂNG, theo options.direction).
+async function sendReservationAlert(reservation, scan, options = {}) {
   const cfg = zaloConfig();
+  const direction = options.direction === 'increase' ? 'increase' : 'drop';
+  const isDrop = direction === 'drop';
   const held = Number(reservation.heldPrice) || 0;
   const now = Number(scan.currentTotal) || 0;
-  const delta = held - now;
+  const delta = Math.abs(held - now);
   const pct = held > 0 ? ((delta / held) * 100).toFixed(1) : '0';
   const seats = (scan.seatAvailable === undefined || scan.seatAvailable === null) ? '-' : scan.seatAvailable;
   const route = `${reservation.from}-${reservation.to}`;
   const pax = `${reservation.adt || 1}NL${reservation.chd ? `+${reservation.chd}TE` : ''}${reservation.inf ? `+${reservation.inf}EB` : ''}`;
+  const timelimit = reservation.timelimitDisplay || reservation.timelimit || '';
 
   const lines = [
-    `🔻 GIÁ GIẢM dưới giá giữ chỗ`,
+    isDrop ? `🔻 GIÁ GIẢM dưới giá giữ chỗ` : `🔺 GIÁ TĂNG trên giá giữ chỗ`,
     `PNR: ${reservation.pnr} · ${reservation.flightNumber} ${route} · ${reservation.date}`,
     `Giá giữ: ${money(held)} ₫`,
     `Giá hiện tại: ${money(now)} ₫ (${money(scan.perAdult)} ₫/khách × ${pax})`,
-    `Tiết kiệm: ${money(delta)} ₫ (-${pct}%)`,
+    isDrop ? `Tiết kiệm: ${money(delta)} ₫ (-${pct}%)` : `Chênh tăng: ${money(delta)} ₫ (+${pct}%)`,
+    timelimit ? `⏳ Thời hạn giữ chỗ: ${timelimit}` : null,
     `Số chỗ còn: ${seats}`,
-  ];
+  ].filter(Boolean);
   const content = lines.join('\n');
 
   const payload = {
-    event: 'price_scan.reservation_drop',
+    event: isDrop ? 'price_scan.reservation_drop' : 'price_scan.reservation_increase',
     channel: 'zalo',
     content,
     summaryText: content,
@@ -213,14 +217,16 @@ async function sendReservationAlert(reservation, scan) {
       adt: reservation.adt,
       chd: reservation.chd,
       inf: reservation.inf,
+      paxTotal: reservation.paxTotal,
       status: reservation.status,
-      timelimit: reservation.timelimit,
+      timelimit,
     },
     scan: {
       currentTotal: now,
       perAdult: scan.perAdult,
       seatAvailable: scan.seatAvailable,
-      delta,
+      direction,
+      delta: isDrop ? (held - now) : (now - held),
       deltaPct: Number(pct),
       currency: scan.currency || 'VND',
     },

@@ -195,11 +195,13 @@ function createReservationWatcher(options = {}) {
     const minDrop = Number(s.minDropAmount) || 0;
     const currentTotal = scan.currentTotal;
     const dropsBelowHeld = currentTotal < heldPrice - minDrop;
+    const risesAboveHeld = currentTotal > heldPrice + minDrop;
 
     // ⚠️ SAFETY GUARD pax: list-booking KHÔNG trả số khách (paxKnown=false → mặc định 1 ADT).
     // Nếu booking thực tế có nhiều khách, heldPrice = N×giá/khách, currentTotal(×1) sẽ thấp
     // bất thường (~1/N) → "rớt giá" giả. Giá vé thật hiếm khi giảm quá ~40%, nên nếu
     // currentTotal < heldPrice × SANE_DROP_RATIO khi pax chưa biết → coi là lệch pax, KHÔNG alert.
+    // (Chỉ áp cho GIẢM — pax chưa biết gây "rớt giả", không gây "tăng giả".)
     const SANE_DROP_RATIO = 0.6;
     const implausibleDrop = !r.paxKnown && heldPrice > 0 && currentTotal < heldPrice * SANE_DROP_RATIO;
     if (implausibleDrop) {
@@ -209,10 +211,16 @@ function createReservationWatcher(options = {}) {
     }
 
     const lastAlertPrice = Number.isFinite(Number(prev.lastAlertPrice)) ? Number(prev.lastAlertPrice) : null;
-    // Alert lần đầu rớt, hoặc rớt sâu hơn mức đã alert (chống spam).
-    const shouldAlert = dropsBelowHeld
+    const lastIncreaseAlertPrice = Number.isFinite(Number(prev.lastIncreaseAlertPrice)) ? Number(prev.lastIncreaseAlertPrice) : null;
+    // GIẢM: alert lần đầu rớt, hoặc rớt sâu hơn mức đã alert (chống spam).
+    const shouldAlertDrop = dropsBelowHeld
       && !implausibleDrop
       && (lastAlertPrice === null || currentTotal < lastAlertPrice - minDrop);
+    // TĂNG (tùy chọn alertOnIncrease): alert lần đầu vượt giá giữ, hoặc tăng cao hơn mức đã báo.
+    const shouldAlertIncrease = !!s.alertOnIncrease
+      && risesAboveHeld
+      && (lastIncreaseAlertPrice === null || currentTotal > lastIncreaseAlertPrice + minDrop);
+    const alertKind = shouldAlertDrop ? 'drop' : (shouldAlertIncrease ? 'increase' : null);
 
     const baseState = {
       ...displayMeta(r),
@@ -225,11 +233,15 @@ function createReservationWatcher(options = {}) {
         : undefined,
     };
 
-    if (shouldAlert && isZaloConfigured()) {
+    if (alertKind && isZaloConfigured()) {
       try {
-        await sendReservationAlert(r, scan);
-        store.upsertReservation(r.pnr, { ...baseState, lastAlertPrice: currentTotal, lastAlertAt: nowIso() });
-        logger.success('[reservation-watch] ALERT', { pnr: r.pnr, held: heldPrice, now: currentTotal, seats: scan.seatAvailable });
+        await sendReservationAlert(r, scan, { direction: alertKind });
+        // Reset tracker chiều ngược lại để khi giá đảo chiều vẫn báo lại đúng.
+        const alertState = alertKind === 'drop'
+          ? { lastAlertPrice: currentTotal, lastAlertAt: nowIso(), lastIncreaseAlertPrice: null }
+          : { lastIncreaseAlertPrice: currentTotal, lastIncreaseAlertAt: nowIso(), lastAlertPrice: null };
+        store.upsertReservation(r.pnr, { ...baseState, ...alertState });
+        logger.success('[reservation-watch] ALERT', { pnr: r.pnr, kind: alertKind, held: heldPrice, now: currentTotal, seats: scan.seatAvailable });
         return { alerted: true };
       } catch (alertErr) {
         logger.error('[reservation-watch] zalo alert failed', { pnr: r.pnr, error: alertErr && alertErr.message });
@@ -363,7 +375,7 @@ function createReservationWatcher(options = {}) {
     const s = settings();
     return {
       enabled: s.enabled, scope: s.scope, intervalMinutes: s.intervalMinutes,
-      minDropAmount: s.minDropAmount, channel: s.channel,
+      minDropAmount: s.minDropAmount, alertOnIncrease: !!s.alertOnIncrease, channel: s.channel,
       started, running, lastRunAt, lastError,
       reservationCount: lastReservationCount, activeCount: lastActiveCount, lastAlertCount,
       zaloConfigured: isZaloConfigured(),
@@ -376,6 +388,7 @@ function createReservationWatcher(options = {}) {
     if (patch.scope !== undefined && ['held', 'all'].includes(String(patch.scope))) clean.scope = String(patch.scope);
     if (patch.intervalMinutes !== undefined) clean.intervalMinutes = Math.max(MIN_INTERVAL_MINUTES, Number(patch.intervalMinutes) || 30);
     if (patch.minDropAmount !== undefined) clean.minDropAmount = Math.max(0, Number(patch.minDropAmount) || 0);
+    if (patch.alertOnIncrease !== undefined) clean.alertOnIncrease = !!patch.alertOnIncrease;
     const saved = store.setReservationSettings(clean);
     scheduleNext();
     return saved;
